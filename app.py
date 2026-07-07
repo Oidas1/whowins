@@ -1,4 +1,5 @@
 import os
+import traceback
 from flask import Flask, render_template, request, Response, stream_with_context
 import anthropic
 
@@ -53,28 +54,37 @@ def index():
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    sport  = request.form.get('sport', '').strip()
-    comp1  = request.form.get('comp1', '').strip()
-    comp2  = request.form.get('comp2', '').strip()
+    sport   = request.form.get('sport', '').strip()
+    comp1   = request.form.get('comp1', '').strip()
+    comp2   = request.form.get('comp2', '').strip()
     context = request.form.get('context', '').strip()
 
     if not all([sport, comp1, comp2]):
         return Response("Missing fields.", status=400)
 
     if not ANTHROPIC_API_KEY:
-        return Response("ANTHROPIC_API_KEY not set.", status=500)
+        return Response("ERROR: ANTHROPIC_API_KEY is not set on this server.", status=500)
 
     prompt = build_prompt(sport, comp1, comp2, context)
 
     def generate():
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        with client.messages.stream(
-            model="claude-opus-4-8",
-            max_tokens=1200,
-            messages=[{"role": "user", "content": prompt}]
-        ) as stream:
-            for text in stream.text_stream:
-                yield text
+        try:
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=1400,
+                messages=[{"role": "user", "content": prompt}]
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+        except anthropic.AuthenticationError:
+            yield "ERROR: Invalid Anthropic API key. Check your ANTHROPIC_API_KEY environment variable."
+        except anthropic.PermissionDeniedError as e:
+            yield f"ERROR: API permission denied — {str(e)}"
+        except anthropic.RateLimitError:
+            yield "ERROR: Rate limit hit. Try again in a moment."
+        except Exception as e:
+            yield f"ERROR: {str(e)}\n\n{traceback.format_exc()}"
 
     return Response(stream_with_context(generate()), mimetype='text/plain')
 
