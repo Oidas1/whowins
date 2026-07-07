@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Sports Matchup Analyzer</title>
+  <meta name="description" content="AI-powered sports matchup analysis. Skills, accolades, mindset, and a straight pick.">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">🏆 WhoWins</div>
+  <p class="tagline">AI-powered matchup analysis for every sport</p>
+</header>
+
+<main>
+  <form id="matchupForm">
+    <div class="form-grid">
+      <div class="field">
+        <label>Sport</label>
+        <input type="text" id="sport" placeholder="e.g. Boxing, NBA, NFL, Tennis…" required>
+      </div>
+    </div>
+
+    <div class="vs-row">
+      <div class="field">
+        <label>Competitor / Team A</label>
+        <input type="text" id="comp1" placeholder="e.g. Canelo Álvarez" required>
+      </div>
+      <div class="vs-badge">VS</div>
+      <div class="field">
+        <label>Competitor / Team B</label>
+        <input type="text" id="comp2" placeholder="e.g. Terence Crawford" required>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Extra context <span class="optional">(optional)</span></label>
+      <textarea id="context" rows="2" placeholder="Injury news, venue, recent form, specific matchup date…"></textarea>
+    </div>
+
+    <button type="submit" id="analyzeBtn">
+      <span id="btnText">Analyze Matchup</span>
+      <span id="btnLoader" style="display:none">Analyzing…</span>
+    </button>
+  </form>
+
+  <div id="resultWrap" style="display:none">
+    <div class="result-header">
+      <span>Analysis</span>
+      <button class="btn-copy" onclick="copyResult()">Copy</button>
+    </div>
+    <div id="result" class="result-body"></div>
+    <div id="winner-bar" class="winner-bar" style="display:none"></div>
+  </div>
+</main>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
