@@ -257,6 +257,7 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   font-weight: 700;
   color: var(--muted);
   word-break: break-word;
+  text-transform: capitalize;
 }
 
 .comp-pct {
@@ -574,13 +575,13 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   font-weight: 700;
   flex-wrap: wrap;
 }
-.competitor { color: var(--muted); }
+.competitor { color: var(--muted); text-transform: capitalize; }
 .competitor.winner { color: var(--green); }
 .vs-text { color: var(--border); font-size: 0.8rem; font-weight: 400; }
 
 .pick-row { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; }
 .pick-label { color: var(--muted); }
-.pick-name  { font-weight: 700; color: var(--text); }
+.pick-name  { font-weight: 700; color: var(--text); text-transform: capitalize; }
 
 .conf-badge {
   font-size: 0.7rem;

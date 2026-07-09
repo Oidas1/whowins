@@ -11,12 +11,21 @@ let fullText = '';
 let currentSport = '', currentComp1 = '', currentComp2 = '';
 let resultData = null;
 
+function toTitleCase(str) {
+  return str.trim().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 document.getElementById('matchupForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  currentSport = document.getElementById('sport').value.trim();
-  currentComp1 = document.getElementById('comp1').value.trim();
-  currentComp2 = document.getElementById('comp2').value.trim();
+  currentSport = toTitleCase(document.getElementById('sport').value);
+  currentComp1 = toTitleCase(document.getElementById('comp1').value);
+  currentComp2 = toTitleCase(document.getElementById('comp2').value);
   const context = document.getElementById('context').value.trim();
+
+  // Update input fields so the user sees the corrected casing
+  document.getElementById('sport').value  = currentSport;
+  document.getElementById('comp1').value  = currentComp1;
+  document.getElementById('comp2').value  = currentComp2;
   if (!currentSport || !currentComp1 || !currentComp2) return;
 
   fullText = '';
