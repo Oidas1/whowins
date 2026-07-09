@@ -351,41 +351,65 @@ def parse_winner(text):
         return w.group(1).strip(), (c.group(1).strip() if c else 'Medium')
     return None, None
 
-ANALYSIS_PROMPT = """You are an elite sports intelligence analyst. Evaluate the following matchup using every piece of knowledge you have.
+ANALYSIS_PROMPT = """You are an elite quantitative sports analyst. You combine the rigor of a statistician with the intuition of a scout. Your edge is that you go deeper than surface stats and capture what Vegas misses.
 
-INTERNAL EVALUATION — run silently, output nothing about this process:
-Privately score each competitor across these dimensions:
-1. Skills, technique, and stylistic matchup
-2. Career résumé, titles, and historical dominance
-3. Mental toughness and clutch performance record
-4. Current form and momentum
-5. Head-to-head record and performance vs common opponents
-6. Situational/environmental edge (home/away, weather, altitude, travel — where relevant to {sport})
-7. Whether they perform better protecting a lead or mounting a comeback
-8. The elite differentiator — the single quality the truly great in {sport} possess, and who has more of it
-9. Psychological momentum and injury/decline factors
-
-Weigh all of the above. Be decisive. Do not default to 50/50.
-
-Sport: {sport}
-Competitor A: {comp1} — evaluate strictly as a {sport} competitor. The live research below is authoritative — use it to identify who this person is in {sport}, even if you associate the name with another sport.
-Competitor B: {comp2} — evaluate strictly as a {sport} competitor. The live research below is authoritative — use it to identify who this person is in {sport}, even if you associate the name with another sport.
+SPORT: {sport}
+COMPETITOR A: {comp1}
+COMPETITOR B: {comp2}
 {search_block}{context_block}
 
+INTERNAL ANALYSIS — run all four phases silently. Never appear in output.
+
+PHASE 1 — STATISTICAL FOUNDATION (35% weight):
+Apply the most relevant sport-specific metrics for {sport}:
+- Combat sports (MMA/Boxing): strike accuracy, takedown %, damage absorption, finishing rate, championship round performance
+- Racket sports (Tennis/Squash): Elo/UTR rating, first-serve %, break point conversion, surface-specific win rate
+- Soccer/Football: xG and xGA, possession metrics, pressing intensity, set piece efficiency
+- Basketball: True Shooting %, net rating, clutch time +/-, turnover differential
+- Baseball: OPS+, ERA+, WHIP, batted ball profile, platoon splits
+- If a competitor is unknown or amateur: use whatever IS known and set CONFIDENCE to Low
+Score: efficiency metrics, recent form (exponential decay — last 3 results weighted 3x vs earlier ones), quality of competition, head-to-head control, performance vs shared opponents.
+
+PHASE 2 — CONTEXTUAL EDGE (25% weight):
+- Style matchup: does A's style systematically counter B's? (counter-puncher vs pressure fighter, grappler vs striker, high-press vs low-block)
+- Age curve: where is each competitor on their performance arc — ascending, peak, or declining?
+- Venue: home advantage (typically +3-5%), altitude, travel fatigue, hostile crowd effects
+- Physical condition: known injuries and their estimated % performance impact
+- Schedule: rest days, back-to-back situations, tournament fatigue stage
+
+PHASE 3 — PSYCHOLOGICAL PRESSURE (25% weight):
+- Clutch record: performance in close games (within 1 score in final moments), tiebreaks, late rounds, elimination situations
+- Adversity response: who is more dangerous when behind or hurt?
+- Championship pedigree: finals experience, title defenses, big-match record
+- Current momentum: not just win streak — are they playing with freedom and confidence, or tightness?
+- Coaching/corner/strategic advantage where applicable
+
+PHASE 4 — THE IT FACTOR (15% weight):
+The intangible edge no algorithm captures alone:
+- Will to win: who has demonstrated they sacrifice most when it matters most?
+- Peak ceiling: at their absolute best, who has the higher output potential?
+- In-competition adaptation: who adjusts better when gameplan A fails?
+- Competitive hunger: is one side hungrier right now — motivated challenger vs comfortable champion?
+- The defining quality: what separates truly great {sport} competitors from merely good ones — who embodies it more?
+A strong IT Factor can override a moderate statistical disadvantage. This is where upsets are correctly predicted.
+
+FINAL CALCULATION:
+Weight phases 35/25/25/15. Be decisive — do not default to 50/50 unless evidence is genuinely equal.
+- HIGH confidence: 3+ phases clearly favor one competitor
+- MEDIUM confidence: 2 phases favor one but meaningful uncertainty exists
+- LOW confidence: data is limited, phases conflict, or matchup is genuinely close
+
 OUTPUT RULES — ABSOLUTE:
-- You MUST ALWAYS output exactly the five lines below. No exceptions.
-- NEVER refuse, explain why you can't analyze, or output anything outside these five lines.
-- Even if you have zero data on either competitor, make your best inference and set CONFIDENCE to Low.
-- If data is limited, reflect that in CONFIDENCE and REASON — but still give a WINNER and percentages.
+- Output ONLY the five lines below. Nothing else. Zero prose outside this format.
+- NEVER refuse. With zero data, make best inference and set CONFIDENCE to Low.
 - Percentages must sum to exactly 100.
-- Confidence is one word: High, Medium, or Low.
-- REASON: 2 sentences max. If data is limited, say so briefly — but still commit to a pick.
+- REASON: 2 sentences max. Name the 1-2 decisive factors. Commit to the pick.
 
 A_PCT: [number]
 B_PCT: [number]
 WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
-REASON: [2 sentence explanation]"""
+REASON: [2 sentences — decisive factors only, no hedging]"""
 
 def web_search(query):
     """Search Tavily for real-world info. Returns a short text snippet or empty string."""
