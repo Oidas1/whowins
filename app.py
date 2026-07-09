@@ -360,6 +360,12 @@ COMPETITOR B: {comp2}
 
 MATHEMATICAL ANALYSIS PROTOCOL (run all steps silently — never appear in output):
 
+CRITICAL KNOWLEDGE RULE:
+Your training data contains extensive knowledge of professional and amateur sports worldwide — ATP/WTA/ITF rankings, college tennis ITA rankings, UTR ratings, Challenger/Futures circuits, NCAA programs, NFL/NBA/MLB/NHL player stats, boxing records, MMA fight histories, and much more.
+ALWAYS draw on this training knowledge first. The supplemental live research above may add recent data, but an empty research result does NOT mean you have no knowledge — it means the web search didn't return results. If you know a player from training, use that knowledge. If you genuinely have no knowledge of either competitor from any source, set CONFIDENCE to Low — but never assume ignorance when you actually know something.
+For college athletes: recall NCAA division, conference (SEC/ACC/Big Ten etc.), ITA ranking, and recent season performance. These are in your training data.
+For ITF/Challenger players: recall ATP ranking, career high, win/loss records, and competition level. These are in your training data.
+
 STEP 1 — SPORT-SPECIFIC MATHEMATICAL BASELINE:
 Choose and apply the appropriate model:
 
@@ -468,18 +474,32 @@ def web_search(query, depth="basic", max_results=5):
     except Exception:
         return ''
 
+SPORT_SEARCH_TERMS = {
+    'tennis': ['ITA college tennis', 'ATP ITF UTR ranking', 'Challenger Futures pro tennis'],
+    'mma': ['UFC Bellator MMA record', 'fight history Sherdog Tapology'],
+    'boxing': ['boxing record BoxRec', 'pro boxing career fights'],
+    'basketball': ['NBA G League basketball stats', 'college basketball NCAA'],
+    'football': ['NFL college football stats', 'pro football reference'],
+    'soccer': ['football career goals assists', 'transfer market stats'],
+    'baseball': ['MLB minor league baseball stats', 'Baseball Reference'],
+    'golf': ['PGA Tour golf ranking OWGR', 'golf stats strokes gained'],
+}
+
 def research_competitor(name, sport):
-    """Run multiple targeted searches for a single competitor and combine results."""
+    """Run targeted searches for a competitor, using sport-specific terms."""
+    sport_key = sport.lower().split()[0]
+    extras = SPORT_SEARCH_TERMS.get(sport_key, [sport])
+
     queries = [
-        f"{name} {sport} career statistics record",
-        f"{name} {sport} ranking results 2025 2026",
-        f"{name} {sport} profile biography",
+        f"{name} {extras[0] if extras else sport} career statistics",
+        f"{name} {extras[1] if len(extras) > 1 else sport} ranking record 2025 2026",
+        f"{name} {sport} profile results history",
     ]
+
     results = []
-    # First query gets advanced depth for richer content
     for i, q in enumerate(queries):
         depth = "advanced" if i == 0 else "basic"
-        result = web_search(q, depth=depth, max_results=4)
+        result = web_search(q, depth=depth, max_results=5)
         if result:
             results.append(result)
     return '\n'.join(results) if results else ''
@@ -515,7 +535,7 @@ def build_prompt(sport, comp1, comp2, context):
 
     search_block = ''
     if research.get('comp1') or research.get('comp2') or research.get('h2h'):
-        search_block = '\n\nLIVE RESEARCH (authoritative):\n'
+        search_block = '\n\nSUPPLEMENTAL LIVE RESEARCH (use to verify or update what you already know — your training knowledge takes priority):\n'
         if research.get('comp1'): search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
         if research.get('comp2'): search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
         if research.get('h2h'):  search_block += f'\n[HEAD-TO-HEAD]\n{research["h2h"]}\n'
