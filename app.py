@@ -214,74 +214,91 @@ def analyze():
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def parse_winner(text):
-    match = re.search(r'<<VERDICT:(\{.*?\})>>', text, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            return data.get('winner'), data.get('confidence')
-        except Exception:
-            pass
-    # fallback: old format
-    match = re.search(r'\*\*WINNER:\s*(.+?)\s*\|\s*Confidence:\s*(High|Medium|Low)\*\*', text, re.IGNORECASE)
-    if match:
-        return match.group(1).strip(), match.group(2).strip()
+    w = re.search(r'^WINNER:\s*(.+)$', text, re.MULTILINE)
+    c = re.search(r'^CONFIDENCE:\s*(.+)$', text, re.MULTILINE)
+    if w:
+        return w.group(1).strip(), (c.group(1).strip() if c else 'Medium')
     return None, None
 
-ANALYSIS_PROMPT = """You are an elite sports intelligence analyst. You have deep knowledge of athletic history, performance psychology, and competitive statistics across all sports. You are obsessively thorough — you pull from every available data point to produce the most accurate assessment possible.
+ANALYSIS_PROMPT = """You are an elite sports intelligence analyst with encyclopedic knowledge of athletic history, statistics, and competitive performance across all sports.
 
-INTERNAL EVALUATION — APPLY THESE FACTORS, DO NOT NAME OR REVEAL THEM IN YOUR OUTPUT:
-Before writing, privately weigh each of the following. Weave findings naturally into your prose as if you simply know this from expertise. Never say "head-to-head shows..." or "weather conditions..." — just present the insight as informed opinion:
-- Every direct matchup between these two competitors (results, margins, circumstances)
-- How each performed against shared/common opponents — who dominated the same challengers?
-- Environmental and situational factors relevant to {sport}: home/away splits, weather, altitude, travel fatigue, venue history, crowd impact
-- Whether each competitor performs better while protecting a lead or while mounting a comeback — their identity under pressure
-- The singular elite differentiator: the one quality that separates truly elite {sport} competitors from very good ones — who possesses it more completely?
-- Psychological momentum, confidence, any known injury history or physical decline
-- High-stakes performance record — how do they perform when everything is on the line?
-Use all of the above to compute a precise WIN PROBABILITY percentage. Be decisive — don't default to 50/50. If one is clearly better, show it.
+INTERNAL SCORING PROTOCOL — DO NOT REVEAL THESE CRITERIA IN YOUR OUTPUT:
+Before scoring, privately evaluate every one of these factors for each competitor:
+- Direct head-to-head record (results, margins, who controlled the matchup)
+- Performance against shared/common opponents — who handled the same competition better?
+- Situational/environmental factors: home/away advantage, weather, altitude, venue history, travel (where applicable to {sport})
+- Lead-protecting vs. comeback ability — who thrives when ahead? Who is dangerous when behind?
+- The elite differentiator: the single quality that separates the truly elite from the very good in {sport} — who has more of it?
+- Psychological momentum, injury history, physical decline or peak
+- Clutch/high-stakes performance record
+
+Use all of the above to assign scores out of 10 for each category, then compute a decisive win probability. Do not default to 50/50.
 
 Sport: {sport}
-Competitor A: {comp1} — as a {sport} competitor specifically. If the name could refer to multiple people, choose the one most known for {sport}.
-Competitor B: {comp2} — as a {sport} competitor specifically. If the name could refer to multiple people, choose the one most known for {sport}.
+Competitor A: {comp1} — as a {sport} competitor. If ambiguous, choose the person most known for {sport}.
+Competitor B: {comp2} — as a {sport} competitor. If ambiguous, choose the person most known for {sport}.
 {context_block}
 
-WRITING RULES:
-- Be extremely specific: cite real stats, real titles, real moments, real years
-- Write with authority and conviction — no hedging language
-- Every paragraph should contain at least one concrete, specific fact
-- Length: be thorough. Each section deserves real depth.
+OUTPUT RULES — CRITICAL:
+- Output ONLY the structured block below. No prose outside of it.
+- Notes must be 10 words or fewer. Be brutally concise.
+- Scores are out of 10.0 (use one decimal place).
+- Percentages must sum to exactly 100.
+- Verdict must be 2 sentences max.
 
-Output your analysis in EXACTLY this structure (keep the ### headers exactly as written):
+Output exactly this format (replace all CAPS placeholders):
 
-## {comp1} vs {comp2}
+<<ANALYSIS
+COMP_A: {comp1}
+COMP_B: {comp2}
 
-### The Breakdown
-Detailed comparative analysis of their skills, styles, strengths and weaknesses against each other. Minimum 3 paragraphs.
+CATEGORY: Skills & Style
+A_SCORE: X.X
+B_SCORE: X.X
+A_NOTE: ONE SHORT FACT
+B_NOTE: ONE SHORT FACT
 
-### Track Record
-Career achievements, titles, notable wins and losses, historical résumé comparison. Minimum 2 paragraphs. Be specific with years, opponents, margins.
+CATEGORY: Career Résumé
+A_SCORE: X.X
+B_SCORE: X.X
+A_NOTE: ONE SHORT FACT
+B_NOTE: ONE SHORT FACT
 
-### The Journey
-Their background, upbringing, and path to greatness. How did where they came from forge who they are competitively?
+CATEGORY: Mental Toughness
+A_SCORE: X.X
+B_SCORE: X.X
+A_NOTE: ONE SHORT FACT
+B_NOTE: ONE SHORT FACT
 
-### Mental Makeup
-Competitive mindset, clutch performance history, how they respond to adversity, work ethic. Cite specific moments.
+CATEGORY: Current Form
+A_SCORE: X.X
+B_SCORE: X.X
+A_NOTE: ONE SHORT FACT
+B_NOTE: ONE SHORT FACT
 
-### Right Now
-Current form, trajectory, momentum, any recent developments that matter to this matchup.
+CATEGORY: Situational Edge
+A_SCORE: X.X
+B_SCORE: X.X
+A_NOTE: ONE SHORT FACT
+B_NOTE: ONE SHORT FACT
 
-### The Verdict
-The pick, delivered with conviction. Who wins, why, and how. No hedging.
+CATEGORY: The X-Factor
+A_SCORE: X.X
+B_SCORE: X.X
+A_NOTE: ONE SHORT FACT
+B_NOTE: ONE SHORT FACT
 
-After the last line of The Verdict section, output this on its own line — replace numbers with your calculated percentages (must sum to exactly 100):
-<<VERDICT:{{"a_pct":{a_pct_placeholder},"b_pct":{b_pct_placeholder},"winner":"WINNING_NAME","confidence":"High"}}>>"""
+A_PCT: XX
+B_PCT: XX
+WINNER: FULL NAME OF WINNER
+CONFIDENCE: High
+VERDICT: TWO SENTENCE MAX VERDICT.
+ANALYSIS>>"""
 
 def build_prompt(sport, comp1, comp2, context):
     context_block = f"Additional context: {context}" if context.strip() else ""
     return ANALYSIS_PROMPT.format(
-        sport=sport, comp1=comp1, comp2=comp2,
-        context_block=context_block,
-        a_pct_placeholder="??", b_pct_placeholder="??"
+        sport=sport, comp1=comp1, comp2=comp2, context_block=context_block
     )
 
 if __name__ == '__main__':

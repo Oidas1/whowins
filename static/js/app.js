@@ -1,36 +1,32 @@
-// ── Section config (maps ### headers → display labels + icons) ───────────────
-const SECTION_MAP = {
-  'the breakdown': { icon: '⚡', label: 'The Breakdown' },
-  'track record':  { icon: '🏆', label: 'Track Record'  },
-  'the journey':   { icon: '🌱', label: 'The Journey'   },
-  'mental makeup': { icon: '🧠', label: 'Mental Makeup' },
-  'right now':     { icon: '📈', label: 'Right Now'     },
-  'the verdict':   { icon: '⚖️', label: 'The Verdict', highlight: true },
+const CATEGORY_ICONS = {
+  'skills & style':  '⚡',
+  'career résumé':   '🏆',
+  'mental toughness':'🧠',
+  'current form':    '📈',
+  'situational edge':'🎯',
+  'the x-factor':    '⭐',
 };
 
 const LOADING_MSGS = [
-  'Pulling every stat, record, and detail we can find…',
-  'Digging into career histories and head-to-head data…',
-  'Analyzing performance patterns and mental records…',
-  'Crunching the numbers on form, momentum, and edge…',
-  'Comparing their biggest moments under pressure…',
-  'Almost done — building your breakdown…',
+  'Pulling career stats and head-to-head data…',
+  'Evaluating performance against common opponents…',
+  'Analyzing clutch moments and high-stakes records…',
+  'Scoring situational edge and mental toughness…',
+  'Computing win probability…',
+  'Finalizing breakdown…',
 ];
 
 let fullText = '';
-let currentComp1 = '', currentComp2 = '', currentSport = '';
-let msgInterval = null;
+let currentSport = '', currentComp1 = '', currentComp2 = '';
 
-// ── Form submit ───────────────────────────────────────────────────────────────
+// ── Form ──────────────────────────────────────────
 
 document.getElementById('matchupForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-
   currentSport = document.getElementById('sport').value.trim();
   currentComp1 = document.getElementById('comp1').value.trim();
   currentComp2 = document.getElementById('comp2').value.trim();
   const context = document.getElementById('context').value.trim();
-
   if (!currentSport || !currentComp1 || !currentComp2) return;
 
   fullText = '';
@@ -54,17 +50,17 @@ document.getElementById('matchupForm').addEventListener('submit', async (e) => {
       const { done, value } = await reader.read();
       if (done) break;
       fullText += decoder.decode(value, { stream: true });
-      msgIdx = Math.min(Math.floor(fullText.length / 400), LOADING_MSGS.length - 1);
-      document.getElementById('loadingMsg').textContent = LOADING_MSGS[msgIdx];
+      const newIdx = Math.min(Math.floor(fullText.length / 300), LOADING_MSGS.length - 1);
+      if (newIdx !== msgIdx) {
+        msgIdx = newIdx;
+        document.getElementById('loadingMsg').textContent = LOADING_MSGS[msgIdx];
+      }
     }
 
-    if (fullText.startsWith('ERROR')) {
-      showError(fullText);
-      return;
-    }
+    if (fullText.startsWith('ERROR')) { showError(fullText); return; }
 
-    const verdict = extractVerdict(fullText);
-    renderResult(currentComp1, currentComp2, fullText, verdict);
+    const data = parseAnalysis(fullText);
+    renderResult(data);
     saveToJournal(currentSport, currentComp1, currentComp2, fullText);
 
   } catch (err) {
@@ -72,63 +68,140 @@ document.getElementById('matchupForm').addEventListener('submit', async (e) => {
   }
 });
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// ── Parser ────────────────────────────────────────
 
-function renderResult(comp1, comp2, text, verdict) {
-  clearInterval(msgInterval);
+function parseAnalysis(text) {
+  const get = (key) => {
+    const m = text.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
+    return m ? m[1].trim() : '';
+  };
+
+  const categories = [];
+  const catBlocks = text.split(/^CATEGORY:/m).slice(1);
+  catBlocks.forEach(block => {
+    const lines = block.trim().split('\n');
+    const name    = lines[0].trim();
+    const aScore  = parseFloat((block.match(/^A_SCORE:\s*(.+)$/m) || [])[1]) || 0;
+    const bScore  = parseFloat((block.match(/^B_SCORE:\s*(.+)$/m) || [])[1]) || 0;
+    const aNote   = ((block.match(/^A_NOTE:\s*(.+)$/m) || [])[1] || '').trim();
+    const bNote   = ((block.match(/^B_NOTE:\s*(.+)$/m) || [])[1] || '').trim();
+    categories.push({ name, aScore, bScore, aNote, bNote });
+  });
+
+  return {
+    compA:      get('COMP_A') || currentComp1,
+    compB:      get('COMP_B') || currentComp2,
+    aPct:       parseInt(get('A_PCT')) || 50,
+    bPct:       parseInt(get('B_PCT')) || 50,
+    winner:     get('WINNER'),
+    confidence: get('CONFIDENCE') || 'Medium',
+    verdict:    get('VERDICT'),
+    categories,
+  };
+}
+
+// ── Render ────────────────────────────────────────
+
+function renderResult(data) {
   document.getElementById('loadingSection').style.display = 'none';
-  document.getElementById('resultSection').style.display = 'block';
+  document.getElementById('resultSection').style.display  = 'block';
 
-  // Clean verdict block from display text
-  const cleanText = text.replace(/<<VERDICT:.*?>>/gs, '').trim();
-
-  // Win probability bar
-  renderProbBar(comp1, comp2, verdict);
-
-  // Parse and render sections
-  renderSections(cleanText, comp1, comp2);
+  renderProbBar(data);
+  renderCategories(data);
+  renderVerdict(data);
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function renderProbBar(comp1, comp2, verdict) {
-  document.getElementById('probNameA').textContent = comp1;
-  document.getElementById('probNameB').textContent = comp2;
+function renderProbBar(data) {
+  document.getElementById('probNameA').textContent = data.compA;
+  document.getElementById('probNameB').textContent = data.compB;
 
-  if (!verdict) {
-    document.getElementById('probPctA').textContent = '?';
-    document.getElementById('probPctB').textContent = '?';
-    return;
-  }
+  animateCount('probPctA', data.aPct, '%');
+  animateCount('probPctB', data.bPct, '%');
 
-  const aPct = verdict.a_pct || 50;
-  const bPct = verdict.b_pct || 50;
-
-  // Animate percentage count-up
-  animateCount('probPctA', aPct, '%');
-  animateCount('probPctB', bPct, '%');
-
-  // Animate bar fill
   setTimeout(() => {
-    document.getElementById('probFillA').style.width = aPct + '%';
-    document.getElementById('probFillB').style.width = bPct + '%';
+    document.getElementById('probFillA').style.width = data.aPct + '%';
+    document.getElementById('probFillB').style.width = data.bPct + '%';
   }, 100);
 
-  // Highlight winner side
-  const winner = verdict.winner || '';
-  const aWins = winner && comp1.toLowerCase().includes(winner.split(' ')[0].toLowerCase()) ||
-                winner && winner.toLowerCase().includes(comp1.split(' ')[0].toLowerCase());
-
+  const aWins = data.winner && (
+    data.winner.toLowerCase().includes(data.compA.split(' ')[0].toLowerCase()) ||
+    data.compA.toLowerCase().includes(data.winner.split(' ')[0].toLowerCase())
+  );
   document.getElementById('probA').classList.toggle('prob-winner', aWins);
   document.getElementById('probB').classList.toggle('prob-winner', !aWins);
 
-  // Winner badge
+  const conf = data.confidence;
+  const emoji = conf === 'High' ? '🔥' : conf === 'Medium' ? '⚡' : '🎲';
   const badge = document.getElementById('probWinnerBadge');
-  const conf = verdict.confidence || 'Medium';
-  const confEmoji = conf === 'High' ? '🔥' : conf === 'Medium' ? '⚡' : '🎲';
-  badge.textContent = `${confEmoji} ${winner} wins — ${conf} confidence`;
+  badge.textContent = `${emoji} ${data.winner} — ${conf} Confidence`;
   badge.className = 'prob-winner-badge conf-' + conf.toLowerCase();
   badge.style.display = 'block';
+}
+
+function renderCategories(data) {
+  const grid = document.getElementById('sectionsGrid');
+  grid.innerHTML = '';
+
+  data.categories.forEach(cat => {
+    const icon = CATEGORY_ICONS[cat.name.toLowerCase()] || '📊';
+    const aWins = cat.aScore >= cat.bScore;
+
+    const card = document.createElement('div');
+    card.className = 'section-card';
+    card.innerHTML = `
+      <div class="section-header">
+        <span class="section-icon">${icon}</span>
+        <span class="section-title">${cat.name}</span>
+      </div>
+      <div class="score-row">
+        <span class="score-name ${aWins ? 'score-winner' : ''}">${shortName(data.compA)}</span>
+        <div class="score-bar-wrap">
+          <div class="score-bar">
+            <div class="score-fill ${aWins ? 'fill-winner' : 'fill-loser'}" style="width:0%" data-w="${(cat.aScore/10*100).toFixed(0)}%"></div>
+          </div>
+        </div>
+        <span class="score-num ${aWins ? 'score-winner' : ''}">${cat.aScore.toFixed(1)}</span>
+      </div>
+      <div class="score-row">
+        <span class="score-name ${!aWins ? 'score-winner' : ''}">${shortName(data.compB)}</span>
+        <div class="score-bar-wrap">
+          <div class="score-bar">
+            <div class="score-fill ${!aWins ? 'fill-winner' : 'fill-loser'}" style="width:0%" data-w="${(cat.bScore/10*100).toFixed(0)}%"></div>
+          </div>
+        </div>
+        <span class="score-num ${!aWins ? 'score-winner' : ''}">${cat.bScore.toFixed(1)}</span>
+      </div>
+      ${cat.aNote || cat.bNote ? `
+      <div class="score-notes">
+        ${cat.aNote ? `<div class="score-note"><span class="note-label">${shortName(data.compA)}:</span> ${cat.aNote}</div>` : ''}
+        ${cat.bNote ? `<div class="score-note"><span class="note-label">${shortName(data.compB)}:</span> ${cat.bNote}</div>` : ''}
+      </div>` : ''}
+    `;
+    grid.appendChild(card);
+  });
+
+  // Animate bars after paint
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      document.querySelectorAll('.score-fill').forEach(el => {
+        el.style.width = el.dataset.w;
+      });
+    }, 150);
+  });
+}
+
+function renderVerdict(data) {
+  const el = document.getElementById('verdictCard');
+  if (!el) return;
+  el.style.display = data.verdict ? 'block' : 'none';
+  document.getElementById('verdictText').textContent = data.verdict || '';
+}
+
+function shortName(name) {
+  const parts = name.trim().split(' ');
+  return parts.length > 1 ? parts[parts.length - 1] : name;
 }
 
 function animateCount(elId, target, suffix = '') {
@@ -139,66 +212,14 @@ function animateCount(elId, target, suffix = '') {
     current = Math.min(current + step, target);
     el.textContent = Math.round(current) + suffix;
     if (current >= target) clearInterval(timer);
-  }, 30);
+  }, 25);
 }
 
-function renderSections(text, comp1, comp2) {
-  const grid = document.getElementById('sectionsGrid');
-  grid.innerHTML = '';
-
-  // Split by ### headers
-  const parts = text.split(/^### /m).filter(Boolean);
-
-  // Remove the ## title line from the first chunk
-  const firstPart = parts[0] || '';
-  const bodyStart = firstPart.indexOf('\n');
-  if (bodyStart > -1) parts[0] = firstPart.slice(bodyStart + 1);
-
-  parts.forEach(chunk => {
-    const nlIdx = chunk.indexOf('\n');
-    if (nlIdx === -1) return;
-    const rawTitle = chunk.slice(0, nlIdx).trim();
-    const body = chunk.slice(nlIdx + 1).trim();
-    if (!body) return;
-
-    const key = rawTitle.toLowerCase();
-    const cfg = SECTION_MAP[key] || { icon: '📌', label: rawTitle };
-
-    const card = document.createElement('div');
-    card.className = 'section-card' + (cfg.highlight ? ' section-verdict' : '');
-
-    card.innerHTML = `
-      <div class="section-header">
-        <span class="section-icon">${cfg.icon}</span>
-        <span class="section-title">${cfg.label}</span>
-      </div>
-      <div class="section-body">${formatBody(body)}</div>`;
-
-    grid.appendChild(card);
-  });
-}
-
-function formatBody(text) {
-  return text
-    .split('\n\n')
-    .filter(p => p.trim())
-    .map(p => `<p>${p.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, ' ')}</p>`)
-    .join('');
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function extractVerdict(text) {
-  const match = text.match(/<<VERDICT:(\{.*?\})>>/s);
-  if (match) {
-    try { return JSON.parse(match[1]); } catch (_) {}
-  }
-  return null;
-}
+// ── Helpers ───────────────────────────────────────
 
 function showLoading(comp1, comp2) {
-  document.getElementById('formSection').style.display = 'none';
-  document.getElementById('resultSection').style.display = 'none';
+  document.getElementById('formSection').style.display    = 'none';
+  document.getElementById('resultSection').style.display  = 'none';
   document.getElementById('loadingSection').style.display = 'block';
   document.getElementById('loadName1').textContent = comp1;
   document.getElementById('loadName2').textContent = comp2;
@@ -206,24 +227,19 @@ function showLoading(comp1, comp2) {
 }
 
 function showError(msg) {
-  clearInterval(msgInterval);
   document.getElementById('loadingSection').style.display = 'none';
-  document.getElementById('formSection').style.display = 'block';
-  const btn = document.getElementById('analyzeBtn');
-  btn.disabled = false;
-  document.getElementById('btnText').style.display = 'inline';
-  document.getElementById('btnLoader').style.display = 'none';
+  document.getElementById('formSection').style.display    = 'block';
   alert('Error: ' + msg);
 }
 
 function newSearch() {
   document.getElementById('resultSection').style.display = 'none';
-  document.getElementById('formSection').style.display = 'block';
+  document.getElementById('formSection').style.display   = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function copyResult() {
-  navigator.clipboard.writeText(fullText.replace(/<<VERDICT:.*?>>/gs, '').trim()).then(() => {
+  navigator.clipboard.writeText(fullText).then(() => {
     const msg = document.getElementById('copiedMsg');
     msg.classList.add('show');
     setTimeout(() => msg.classList.remove('show'), 2000);

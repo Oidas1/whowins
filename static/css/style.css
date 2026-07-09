@@ -302,7 +302,7 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 .sections-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
   animation: fadeUp 0.5s ease 0.1s both;
 }
 
@@ -310,16 +310,10 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.section-verdict {
-  grid-column: 1 / -1;
-  border-color: rgba(240,180,41,0.25);
-  background: linear-gradient(135deg, var(--surface), #1e1a0e);
 }
 
 .section-header {
@@ -330,27 +324,105 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   border-bottom: 1px solid var(--border);
 }
 
-.section-icon { font-size: 1.1rem; }
-
+.section-icon  { font-size: 1rem; }
 .section-title {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-.section-verdict .section-title { color: var(--accent); }
-
-.section-body {
-  font-size: 0.92rem;
-  line-height: 1.75;
-  color: var(--text);
+/* ── Score rows ──────────────────────────────────── */
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.section-body p { margin-bottom: 10px; }
-.section-body p:last-child { margin-bottom: 0; }
-.section-body strong { color: #fff; font-weight: 700; }
+.score-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  width: 56px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.score-name.score-winner { color: var(--accent); }
+
+.score-bar-wrap { flex: 1; }
+
+.score-bar {
+  height: 7px;
+  background: var(--surface2);
+  border-radius: 50px;
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  border-radius: 50px;
+  transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+}
+.fill-winner { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+.fill-loser  { background: var(--border); }
+
+.score-num {
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: var(--muted);
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.score-num.score-winner { color: var(--accent); }
+
+.score-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.score-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.note-label {
+  font-weight: 700;
+  color: var(--text);
+  margin-right: 3px;
+}
+
+/* ── Verdict card ────────────────────────────────── */
+.verdict-card {
+  background: linear-gradient(135deg, var(--surface), #1e1a0e);
+  border: 1px solid rgba(240,180,41,0.3);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fadeUp 0.5s ease 0.15s both;
+}
+
+.verdict-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.verdict-text {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--text);
+}
 
 /* ── Result actions ──────────────────────────────── */
 .result-actions {
