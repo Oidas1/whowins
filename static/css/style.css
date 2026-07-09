@@ -760,6 +760,37 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 }
 .event-matchup span { color: var(--muted); font-weight: 400; margin: 0 4px; }
 
+/* ── Knowledge cards ─────────────────────────────── */
+.know-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+}
+
+.know-card {
+  display: flex;
+  gap: 10px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  align-items: flex-start;
+}
+
+.know-name {
+  font-weight: 800;
+  color: var(--accent);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 80px;
+  text-transform: capitalize;
+}
+
+.know-text {
+  color: var(--muted);
+}
+
 /* ── Odds card ───────────────────────────────────── */
 .odds-card {
   background: var(--surface);

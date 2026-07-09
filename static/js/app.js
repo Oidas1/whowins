@@ -91,15 +91,19 @@ function parse(text) {
     const m = text.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
     return m ? m[1].trim() : '';
   };
-  // REASON may span multiple lines — grab everything after "REASON: "
-  const reasonMatch = text.match(/^REASON:\s*(.+?)(?=\n[A-Z_]+:|$)/ms);
+  const getMultiline = (key) => {
+    const m = text.match(new RegExp(`^${key}:\\s*(.+?)(?=\\n[A-Z_]+:|$)`, 'ms'));
+    return m ? m[1].trim() : get(key);
+  };
   return {
     aPct:       parseInt(get('A_PCT'))  || 50,
     bPct:       parseInt(get('B_PCT'))  || 50,
     winner:     get('WINNER'),
     confidence: get('CONFIDENCE') || 'Medium',
     edge:       parseInt(get('EDGE')) || null,
-    reason:     reasonMatch ? reasonMatch[1].trim() : get('REASON'),
+    knowA:      get('KNOW_A'),
+    knowB:      get('KNOW_B'),
+    reason:     getMultiline('REASON'),
   };
 }
 
@@ -135,6 +139,18 @@ function render(d) {
   badge.textContent = `${emoji} ${conf} Confidence`;
   badge.className   = 'conf-badge-big conf-' + conf.toLowerCase();
   document.getElementById('confRow').style.display = 'flex';
+
+  // Knowledge cards
+  const existing = document.getElementById('knowCards');
+  if (existing) existing.remove();
+  if (d.knowA || d.knowB) {
+    const knowDiv = document.createElement('div');
+    knowDiv.id = 'knowCards';
+    knowDiv.className = 'know-cards';
+    if (d.knowA) knowDiv.innerHTML += `<div class="know-card"><span class="know-name">${currentComp1}</span><span class="know-text">${d.knowA}</span></div>`;
+    if (d.knowB) knowDiv.innerHTML += `<div class="know-card"><span class="know-name">${currentComp2}</span><span class="know-text">${d.knowB}</span></div>`;
+    document.getElementById('resultSection').querySelector('.result-card').appendChild(knowDiv);
+  }
 
   const reasonEl = document.getElementById('reasonText');
   if (d.reason) {

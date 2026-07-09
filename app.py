@@ -325,8 +325,8 @@ def analyze():
         try:
             client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
             with client.messages.stream(
-                model="claude-sonnet-4-6",
-                max_tokens=1400,
+                model="claude-opus-4-8",
+                max_tokens=1800,
                 messages=[{"role": "user", "content": prompt}]
             ) as stream:
                 for text in stream.text_stream:
@@ -426,23 +426,30 @@ STEP 6 — FINAL PROBABILITY:
   - MEDIUM: baseline favors one, adjustments mixed or minor uncertainty
   - LOW: limited data, conflicting signals, or result within 5% of 50/50
 
-OUTPUT RULES — ABSOLUTE:
-Output ONLY the six lines below. Nothing else. Zero prose outside this format.
-NEVER refuse. With zero data, make best inference, set CONFIDENCE to Low.
-Percentages must sum to exactly 100.
-REASON: 3-5 sentences structured as:
-  [1] Level/ranking edge — cite specific numbers, ratings, competition tier
-  [2] H2H record if known — cite score, tournament name, date
-  [3] Key mathematical or analytical factor driving the pick
-  [4] Optional: significant caution flag that could flip the result
-Cite real data (tournament names, scores, rankings, stats) wherever you know them.
+STEP 0 — KNOWLEDGE RECALL (do this FIRST before any math):
+Before running the mathematical steps, write what you know about each competitor.
+Pull from your training data: rankings, records, programs, competition level, notable results, anything.
+Format as:
+KNOW_A: [everything you know about {comp1} as a {sport} competitor — be specific]
+KNOW_B: [everything you know about {comp2} as a {sport} competitor — be specific]
 
+Then run Steps 1-6 using that knowledge as your data foundation.
+
+OUTPUT FORMAT — output these eight lines in this exact order:
+KNOW_A: [your knowledge of {comp1} — 1-3 sentences, specific facts]
+KNOW_B: [your knowledge of {comp2} — 1-3 sentences, specific facts]
 A_PCT: [number]
 B_PCT: [number]
 WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
 EDGE: [number]
-REASON: [3-5 sentences]"""
+REASON: [3-5 sentences: level/ranking edge with specifics, H2H if known, key deciding factor, optional caution flag]
+
+RULES:
+- NEVER refuse or output anything outside these eight lines.
+- With zero knowledge of either competitor, write "Unknown — limited training data" in KNOW fields and set CONFIDENCE to Low.
+- Percentages sum to exactly 100.
+- REASON must cite real data points wherever you know them."""
 def web_search(query, depth="basic", max_results=5):
     """Search Tavily. depth='advanced' gives deeper crawl (costs 2 credits vs 1)."""
     if not TAVILY_API_KEY:
