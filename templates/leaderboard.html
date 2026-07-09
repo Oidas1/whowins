@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Leaderboard</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/leaderboard" class="nav-link active">Leaderboard</a>
+    <a href="/journal" class="nav-link">Journal</a>
+    <a href="/logout" class="nav-link">Logout</a>
+  </nav>
+</header>
+
+<main>
+  <div class="lb-wrap">
+    <div class="lb-header">
+      <h1 class="lb-title">Top Predictors</h1>
+      <p class="lb-sub">Ranked by hit rate · minimum 3 settled picks</p>
+    </div>
+
+    {% if board %}
+    <div class="lb-list">
+      {% for u in board %}
+      <div class="lb-row {% if u.is_me %}lb-me{% endif %}">
+        <div class="lb-rank">
+          {% if loop.index == 1 %}🥇
+          {% elif loop.index == 2 %}🥈
+          {% elif loop.index == 3 %}🥉
+          {% else %}{{ loop.index }}{% endif %}
+        </div>
+        <div class="lb-name">
+          {{ u.name }}
+          {% if u.is_me %}<span class="lb-you">you</span>{% endif %}
+        </div>
+        <div class="lb-bar-wrap">
+          <div class="lb-bar">
+            <div class="lb-fill" style="width:{{ u.hit_rate }}%"></div>
+          </div>
+        </div>
+        <div class="lb-stats">
+          <span class="lb-rate">{{ u.hit_rate }}%</span>
+          <span class="lb-record">{{ u.wins }}W – {{ u.losses }}L</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-journal">
+      <p>📋 No rankings yet.</p>
+      <p style="font-size:0.85rem;">Make 3+ predictions and mark their results to appear here.</p>
+      <a href="/" class="btn-new">Start predicting →</a>
+    </div>
+    {% endif %}
+  </div>
+</main>
+</body>
+</html>

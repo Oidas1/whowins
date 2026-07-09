@@ -11,6 +11,7 @@
 <header>
   <a href="/" class="logo">🏆 WhoWins</a>
   <nav class="header-nav">
+    <a href="/leaderboard" class="nav-link">Leaderboard</a>
     <a href="/journal" class="nav-link">Journal</a>
     <a href="/logout" class="nav-link">Logout</a>
   </nav>
@@ -21,11 +22,22 @@
   <!-- Form -->
   <div id="formSection">
     <p class="tagline">Enter any sport and two competitors</p>
+
+    <!-- AI Accuracy bar -->
+    <div class="accuracy-bar" id="accuracyBar" style="display:none">
+      <span class="accuracy-label">AI Accuracy</span>
+      <div class="accuracy-track">
+        <div class="accuracy-fill" id="accuracyFill"></div>
+      </div>
+      <span class="accuracy-pct" id="accuracyPct"></span>
+      <span class="accuracy-sub" id="accuracySub"></span>
+    </div>
+
     <form id="matchupForm">
       <div class="form-card">
         <div class="field">
           <label>Sport</label>
-          <input type="text" id="sport" placeholder="e.g. Boxing, NBA, NFL, Tennis, MMA…" required>
+          <input type="text" id="sport" placeholder="e.g. Boxing, NBA, NFL, Tennis, MMA…" required autocapitalize="words">
         </div>
         <div class="vs-row">
           <div class="field">
@@ -45,6 +57,18 @@
         <button type="submit" id="analyzeBtn">Get Prediction</button>
       </div>
     </form>
+
+    <!-- Trending -->
+    <div class="section-below" id="trendingSection" style="display:none">
+      <div class="below-label">🔥 Trending this week</div>
+      <div class="trending-list" id="trendingList"></div>
+    </div>
+
+    <!-- Upcoming events -->
+    <div class="section-below" id="eventsSection" style="display:none">
+      <div class="below-label">📅 Upcoming matchups</div>
+      <div class="events-grid" id="eventsGrid"></div>
+    </div>
   </div>
 
   <!-- Loading -->
@@ -65,7 +89,6 @@
   <!-- Result -->
   <div id="resultSection" style="display:none">
 
-    <!-- Big probability display -->
     <div class="result-card">
       <div class="competitors-row">
         <div class="comp-block" id="compBlockA">
@@ -84,26 +107,27 @@
           <div class="comp-label">Win Probability</div>
         </div>
       </div>
-
-      <!-- Probability bar -->
       <div class="prob-bar-outer">
         <div class="prob-fill-a" id="probFillA"></div>
         <div class="prob-fill-b" id="probFillB"></div>
       </div>
-
-      <!-- Confidence badge -->
       <div class="conf-row" id="confRow" style="display:none">
         <span class="conf-badge-big" id="confBadge"></span>
       </div>
-
-      <!-- Reason -->
       <p class="reason-text" id="reasonText" style="display:none"></p>
     </div>
 
     <div class="result-actions">
       <button class="btn-action btn-new-search" onclick="newSearch()">🔄 New Search</button>
+      <button class="btn-action" onclick="shareImage()">🖼️ Share Card</button>
       <button class="btn-action" onclick="copyResult()">📋 Copy</button>
       <span class="copied-msg" id="copiedMsg">Copied!</span>
+    </div>
+
+    <!-- Share image preview -->
+    <div id="sharePreview" style="display:none" class="share-preview">
+      <img id="shareImg" alt="Prediction card" style="width:100%;border-radius:12px;">
+      <a id="shareDownload" download="whowins-prediction.png" class="btn-action" style="display:block;text-align:center;margin-top:10px;">⬇️ Download</a>
     </div>
 
   </div>

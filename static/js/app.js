@@ -11,6 +11,16 @@ let fullText = '';
 let currentSport = '', currentComp1 = '', currentComp2 = '';
 let resultData = null;
 
+// ── Init ──────────────────────────────────────────
+
+window.addEventListener('DOMContentLoaded', () => {
+  loadAccuracy();
+  loadTrending();
+  loadEvents();
+});
+
+// ── Form ──────────────────────────────────────────
+
 function toTitleCase(str) {
   return str.trim().replace(/\b\w/g, c => c.toUpperCase());
 }
@@ -22,10 +32,10 @@ document.getElementById('matchupForm').addEventListener('submit', async (e) => {
   currentComp2 = toTitleCase(document.getElementById('comp2').value);
   const context = document.getElementById('context').value.trim();
 
-  // Update input fields so the user sees the corrected casing
-  document.getElementById('sport').value  = currentSport;
-  document.getElementById('comp1').value  = currentComp1;
-  document.getElementById('comp2').value  = currentComp2;
+  document.getElementById('sport').value = currentSport;
+  document.getElementById('comp1').value = currentComp1;
+  document.getElementById('comp2').value = currentComp2;
+
   if (!currentSport || !currentComp1 || !currentComp2) return;
 
   fullText = '';
@@ -76,8 +86,6 @@ function parse(text) {
     return m ? m[1].trim() : '';
   };
   return {
-    compA:      get('COMP_A') || currentComp1,
-    compB:      get('COMP_B') || currentComp2,
     aPct:       parseInt(get('A_PCT'))  || 50,
     bPct:       parseInt(get('B_PCT'))  || 50,
     winner:     get('WINNER'),
@@ -86,16 +94,16 @@ function parse(text) {
   };
 }
 
-// ── Render ────────────────────────────────────────
+// ── Render result ─────────────────────────────────
 
 function render(d) {
   document.getElementById('loadingSection').style.display = 'none';
   document.getElementById('resultSection').style.display  = 'block';
+  document.getElementById('sharePreview').style.display   = 'none';
 
   document.getElementById('compNameA').textContent = currentComp1;
   document.getElementById('compNameB').textContent = currentComp2;
 
-  // Determine winner
   const aWins = d.winner && (
     d.winner.toLowerCase().includes(currentComp1.split(' ')[0].toLowerCase()) ||
     currentComp1.toLowerCase().includes(d.winner.split(' ')[0].toLowerCase())
@@ -104,17 +112,14 @@ function render(d) {
   document.getElementById('compBlockA').className = 'comp-block' + (aWins  ? ' comp-winner' : '');
   document.getElementById('compBlockB').className = 'comp-block' + (!aWins ? ' comp-winner' : '');
 
-  // Animate percentages
   animateCount('compPctA', d.aPct, '%');
   animateCount('compPctB', d.bPct, '%');
 
-  // Animate bar
   setTimeout(() => {
     document.getElementById('probFillA').style.width = d.aPct + '%';
     document.getElementById('probFillB').style.width = d.bPct + '%';
   }, 100);
 
-  // Confidence badge
   const conf  = d.confidence;
   const emoji = conf === 'High' ? '🔥' : conf === 'Medium' ? '⚡' : '🎲';
   const badge = document.getElementById('confBadge');
@@ -142,6 +147,111 @@ function animateCount(elId, target, suffix = '') {
     el.textContent = Math.round(current) + suffix;
     if (current >= target) clearInterval(timer);
   }, 25);
+}
+
+// ── Share image ───────────────────────────────────
+
+async function shareImage() {
+  if (!resultData) return;
+  const btn = document.querySelector('[onclick="shareImage()"]');
+  const orig = btn.textContent;
+  btn.textContent = 'Generating…';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/share/image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        comp1: currentComp1, comp2: currentComp2,
+        sport: currentSport,
+        a_pct: resultData.aPct, b_pct: resultData.bPct,
+        winner: resultData.winner, confidence: resultData.confidence,
+      }),
+    });
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const preview = document.getElementById('sharePreview');
+    document.getElementById('shareImg').src = url;
+    document.getElementById('shareDownload').href = url;
+    preview.style.display = 'block';
+    preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (_) {
+    alert('Could not generate share card. Try again.');
+  } finally {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
+// ── Trending ──────────────────────────────────────
+
+async function loadTrending() {
+  try {
+    const res  = await fetch('/api/trending');
+    const data = await res.json();
+    if (!data.length) return;
+    const list = document.getElementById('trendingList');
+    list.innerHTML = '';
+    data.forEach(item => {
+      const el = document.createElement('button');
+      el.className = 'trending-pill';
+      el.innerHTML = `<span class="trending-sport">${item.sport}</span> ${item.comp_a} vs ${item.comp_b}`;
+      el.onclick = () => {
+        document.getElementById('sport').value = item.sport;
+        document.getElementById('comp1').value = item.comp_a;
+        document.getElementById('comp2').value = item.comp_b;
+        document.getElementById('matchupForm').dispatchEvent(new Event('submit'));
+      };
+      list.appendChild(el);
+    });
+    document.getElementById('trendingSection').style.display = 'block';
+  } catch (_) {}
+}
+
+// ── Events feed ───────────────────────────────────
+
+async function loadEvents() {
+  try {
+    const res  = await fetch('/api/events');
+    const data = await res.json();
+    if (!data.length) return;
+    const grid = document.getElementById('eventsGrid');
+    grid.innerHTML = '';
+    data.forEach(ev => {
+      if (!ev.comp_a || !ev.comp_b) return;
+      const el = document.createElement('button');
+      el.className = 'event-card';
+      el.innerHTML = `
+        <div class="event-sport">${ev.sport}${ev.date ? ' · ' + ev.date : ''}</div>
+        <div class="event-matchup">${ev.comp_a} <span>vs</span> ${ev.comp_b}</div>`;
+      el.onclick = () => {
+        document.getElementById('sport').value = ev.sport;
+        document.getElementById('comp1').value = ev.comp_a;
+        document.getElementById('comp2').value = ev.comp_b;
+        document.getElementById('matchupForm').dispatchEvent(new Event('submit'));
+      };
+      grid.appendChild(el);
+    });
+    document.getElementById('eventsSection').style.display = 'block';
+  } catch (_) {}
+}
+
+// ── Accuracy stat ─────────────────────────────────
+
+async function loadAccuracy() {
+  try {
+    const res  = await fetch('/api/accuracy');
+    const data = await res.json();
+    if (data.rate === null || data.total < 5) return;
+    const bar = document.getElementById('accuracyBar');
+    document.getElementById('accuracyPct').textContent = data.rate + '%';
+    document.getElementById('accuracySub').textContent = `(${data.total} settled picks)`;
+    bar.style.display = 'flex';
+    setTimeout(() => {
+      document.getElementById('accuracyFill').style.width = data.rate + '%';
+    }, 200);
+  } catch (_) {}
 }
 
 // ── Helpers ───────────────────────────────────────
@@ -174,15 +284,6 @@ function copyResult() {
     const msg = document.getElementById('copiedMsg');
     msg.classList.add('show');
     setTimeout(() => msg.classList.remove('show'), 2000);
-  });
-}
-
-function copyRef() {
-  const input = document.getElementById('refLink');
-  if (!input) return;
-  navigator.clipboard.writeText(input.value).then(() => {
-    const btn = document.querySelector('.btn-copy-ref');
-    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 2000); }
   });
 }
 

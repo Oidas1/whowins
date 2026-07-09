@@ -1,16 +1,21 @@
 import os
 import re
 import uuid
+import hashlib
 import traceback
 import secrets
 import threading
-from datetime import datetime
-from flask import Flask, render_template, request, Response, stream_with_context, session, redirect, url_for, jsonify
+import time
+import io
+from datetime import datetime, timedelta
+from flask import Flask, render_template, request, Response, stream_with_context, session, redirect, url_for, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func
 import anthropic
 import urllib.request
 import urllib.parse
 import json
+from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'change-me-in-production')
@@ -59,6 +64,23 @@ with app.app_context():
         db.create_all()
     except Exception as e:
         print(f"Warning: could not create tables on startup: {e}")
+
+# ── Display name helper ───────────────────────────────────────────────────────
+
+_ADJS  = ['Sharp','Bold','Swift','Keen','Wise','Slick','Iron','Cold','Steel','Clutch']
+_NOUNS = ['Hawk','Wolf','Eagle','Fox','Bear','Lion','Viper','Raven','Shark','Ghost']
+
+def get_display_name(uid):
+    h = int(hashlib.md5(uid.encode()).hexdigest()[:8], 16)
+    adj  = _ADJS[h % len(_ADJS)]
+    noun = _NOUNS[(h // len(_ADJS)) % len(_NOUNS)]
+    num  = h % 9000 + 1000
+    return f"{adj}{noun}#{num}"
+
+# ── Events cache ──────────────────────────────────────────────────────────────
+
+_events_cache = {'data': [], 'ts': 0}
+_EVENTS_TTL   = 1800  # 30 min
 
 # ── Password helpers ──────────────────────────────────────────────────────────
 
@@ -381,6 +403,221 @@ def build_prompt(sport, comp1, comp2, context):
         search_block=search_block,
         context_block=context_block
     )
+
+# ── Leaderboard ───────────────────────────────────────────────────────────────
+
+@app.route('/leaderboard')
+def leaderboard():
+    if not is_authed():
+        return redirect(url_for('login'))
+
+    MIN_SETTLED = 3
+    users = UserProfile.query.all()
+    board = []
+    for u in users:
+        queries = Query.query.filter_by(user_uid=u.user_uid).all()
+        wins    = sum(1 for q in queries if q.outcome == 'win')
+        losses  = sum(1 for q in queries if q.outcome == 'loss')
+        settled = wins + losses
+        if settled < MIN_SETTLED:
+            continue
+        hit_rate = round((wins / settled) * 100)
+        board.append({
+            'name':     get_display_name(u.user_uid),
+            'hit_rate': hit_rate,
+            'wins':     wins,
+            'losses':   losses,
+            'total':    len(queries),
+            'is_me':    u.user_uid == get_user_uid(),
+        })
+
+    board.sort(key=lambda x: (-x['hit_rate'], -x['wins']))
+    return render_template('leaderboard.html', board=board)
+
+# ── Trending + Accuracy API ───────────────────────────────────────────────────
+
+@app.route('/api/trending')
+def api_trending():
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    rows = (
+        db.session.query(
+            func.lower(Query.sport).label('sport'),
+            func.lower(Query.competitor_a).label('a'),
+            func.lower(Query.competitor_b).label('b'),
+            func.count().label('cnt')
+        )
+        .filter(Query.created_at >= week_ago)
+        .group_by(func.lower(Query.sport), func.lower(Query.competitor_a), func.lower(Query.competitor_b))
+        .order_by(func.count().desc())
+        .limit(5)
+        .all()
+    )
+    results = [{'sport': r.sport.title(), 'comp_a': r.a.title(), 'comp_b': r.b.title(), 'count': r.cnt} for r in rows]
+    return jsonify(results)
+
+@app.route('/api/accuracy')
+def api_accuracy():
+    total   = Query.query.filter(Query.outcome != 'pending').count()
+    correct = Query.query.filter_by(outcome='win').count()
+    rate    = round((correct / total) * 100) if total else None
+    return jsonify({'total': total, 'correct': correct, 'rate': rate})
+
+# ── Upcoming Events ───────────────────────────────────────────────────────────
+
+def fetch_espn_events(sport, league):
+    try:
+        url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        res = urllib.request.urlopen(req, timeout=6)
+        data = json.loads(res.read())
+        events = []
+        for ev in data.get('events', [])[:3]:
+            comps = ev.get('competitions', [{}])[0].get('competitors', [])
+            if len(comps) >= 2:
+                names = [c.get('team', {}).get('displayName', c.get('athlete', {}).get('displayName', '')) for c in comps]
+                date_str = ev.get('date', '')
+                try:
+                    dt = datetime.strptime(date_str[:10], '%Y-%m-%d').strftime('%b %d')
+                except Exception:
+                    dt = ''
+                events.append({'sport': league.upper().replace('.', ' '), 'comp_a': names[0], 'comp_b': names[1] if len(names) > 1 else '', 'date': dt})
+        return events
+    except Exception:
+        return []
+
+@app.route('/api/events')
+def api_events():
+    global _events_cache
+    if time.time() - _events_cache['ts'] < _EVENTS_TTL and _events_cache['data']:
+        return jsonify(_events_cache['data'])
+
+    feeds = [
+        ('basketball', 'nba'), ('football', 'nfl'), ('baseball', 'mlb'),
+        ('hockey', 'nhl'), ('soccer', 'usa.1'), ('basketball', 'wnba'),
+    ]
+    all_events = []
+    for sport, league in feeds:
+        all_events.extend(fetch_espn_events(sport, league))
+
+    _events_cache = {'data': all_events[:12], 'ts': time.time()}
+    return jsonify(all_events[:12])
+
+# ── Share image ───────────────────────────────────────────────────────────────
+
+def _pil_font(size, bold=True):
+    paths = [
+        f"/System/Library/Fonts/Supplemental/Arial {'Bold' if bold else ''}.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    for p in paths:
+        try:
+            return ImageFont.truetype(p.strip(), size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+def generate_share_image(comp1, comp2, sport, a_pct, b_pct, winner, confidence):
+    W, H = 1200, 630
+    BG       = (20, 18, 15)
+    SURFACE  = (31, 28, 23)
+    BORDER   = (58, 53, 42)
+    BLUE     = (126, 184, 212)
+    SAGE     = (122, 170, 130)
+    TEXT     = (237, 232, 224)
+    MUTED    = (140, 132, 121)
+
+    img  = Image.new('RGB', (W, H), BG)
+    draw = ImageDraw.Draw(img)
+
+    # Card background
+    draw.rounded_rectangle([40, 40, W-40, H-40], radius=24, fill=SURFACE, outline=BORDER, width=2)
+
+    # Sport tag
+    sport_font = _pil_font(22)
+    draw.rounded_rectangle([60, 60, 60 + len(sport)*14 + 24, 100], radius=20, fill=BORDER)
+    draw.text((72, 66), sport.upper(), font=sport_font, fill=MUTED)
+
+    # WhoWins logo top right
+    logo_font = _pil_font(26)
+    logo_text = "WhoWins"
+    lb = draw.textbbox((0,0), logo_text, font=logo_font)
+    draw.text((W - 80 - (lb[2]-lb[0]), 66), logo_text, font=logo_font, fill=BLUE)
+
+    # Determine winner side
+    a_wins = winner and (
+        winner.lower().startswith(comp1.split()[0].lower()) or
+        comp1.lower().startswith(winner.split()[0].lower())
+    )
+
+    # Names
+    name_font = _pil_font(42)
+    a_col = BLUE if a_wins else MUTED
+    b_col = MUTED if a_wins else BLUE
+
+    a_nb = draw.textbbox((0,0), comp1, font=name_font)
+    b_nb = draw.textbbox((0,0), comp2, font=name_font)
+    draw.text((W//4 - (a_nb[2]-a_nb[0])//2, 145), comp1, font=name_font, fill=a_col)
+    draw.text((3*W//4 - (b_nb[2]-b_nb[0])//2, 145), comp2, font=name_font, fill=b_col)
+
+    # Big percentages
+    pct_font = _pil_font(140)
+    a_txt = f"{a_pct}%"
+    b_txt = f"{b_pct}%"
+    a_pb = draw.textbbox((0,0), a_txt, font=pct_font)
+    b_pb = draw.textbbox((0,0), b_txt, font=pct_font)
+    draw.text((W//4 - (a_pb[2]-a_pb[0])//2, 195), a_txt, font=pct_font, fill=a_col)
+    draw.text((3*W//4 - (b_pb[2]-b_pb[0])//2, 195), b_txt, font=pct_font, fill=b_col)
+
+    # VS divider
+    vs_font = _pil_font(28)
+    vs_b = draw.textbbox((0,0), "VS", font=vs_font)
+    draw.text((W//2 - (vs_b[2]-vs_b[0])//2, 295), "VS", font=vs_font, fill=BORDER)
+    draw.line([(W//2, 200), (W//2, 380)], fill=BORDER, width=2)
+
+    # Probability bar
+    bar_x, bar_y, bar_w, bar_h = 80, 420, W-160, 16
+    draw.rounded_rectangle([bar_x, bar_y, bar_x+bar_w, bar_y+bar_h], radius=8, fill=BORDER)
+    fill_w = int(bar_w * (a_pct / 100))
+    if fill_w > 0:
+        draw.rounded_rectangle([bar_x, bar_y, bar_x+fill_w, bar_y+bar_h], radius=8, fill=BLUE)
+    remain = bar_w - fill_w
+    if remain > 0:
+        draw.rounded_rectangle([bar_x+fill_w, bar_y, bar_x+bar_w, bar_y+bar_h], radius=8, fill=SAGE)
+
+    # Winner line
+    conf_emoji = {'High': '🔥', 'Medium': '⚡', 'Low': '🎲'}.get(confidence, '⚡')
+    win_text = f"{winner} wins  ·  {confidence} Confidence"
+    win_font = _pil_font(30)
+    wb = draw.textbbox((0,0), win_text, font=win_font)
+    draw.text((W//2 - (wb[2]-wb[0])//2, 462), win_text, font=win_font, fill=TEXT)
+
+    # Bottom URL
+    url_font = _pil_font(22, bold=False)
+    url_text = "whowins.onrender.com"
+    ub = draw.textbbox((0,0), url_text, font=url_font)
+    draw.text((W//2 - (ub[2]-ub[0])//2, 560), url_text, font=url_font, fill=MUTED)
+
+    buf = io.BytesIO()
+    img.save(buf, format='PNG', optimize=True)
+    buf.seek(0)
+    return buf
+
+@app.route('/share/image', methods=['POST'])
+def share_image():
+    if not is_authed():
+        return 'Unauthorized', 401
+    data = request.get_json() or {}
+    buf = generate_share_image(
+        comp1=data.get('comp1', ''),
+        comp2=data.get('comp2', ''),
+        sport=data.get('sport', ''),
+        a_pct=int(data.get('a_pct', 50)),
+        b_pct=int(data.get('b_pct', 50)),
+        winner=data.get('winner', ''),
+        confidence=data.get('confidence', 'Medium'),
+    )
+    return send_file(buf, mimetype='image/png', download_name='whowins-prediction.png')
 
 if __name__ == '__main__':
     app.run(debug=True)
