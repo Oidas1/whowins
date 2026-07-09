@@ -59,8 +59,10 @@ class Query(db.Model):
     confidence   = db.Column(db.String(20))
     analysis     = db.Column(db.Text)
     outcome        = db.Column(db.String(10), default='pending')  # pending / win / loss
-    a_odds_pct     = db.Column(db.Float, nullable=True)   # Vegas implied % for comp_a
-    b_odds_pct     = db.Column(db.Float, nullable=True)   # Vegas implied % for comp_b
+    ai_a_pct       = db.Column(db.Integer, nullable=True)   # AI win % for comp_a
+    ai_b_pct       = db.Column(db.Integer, nullable=True)   # AI win % for comp_b
+    a_odds_pct     = db.Column(db.Float, nullable=True)     # Vegas implied % for comp_a
+    b_odds_pct     = db.Column(db.Float, nullable=True)     # Vegas implied % for comp_b
     is_upset_alert = db.Column(db.Boolean, default=False)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -265,6 +267,8 @@ def journal_save():
         winner         = winner,
         confidence     = confidence,
         analysis       = analysis_text[:8000],
+        ai_a_pct       = int(data['a_pct']) if data.get('a_pct') is not None else None,
+        ai_b_pct       = int(data['b_pct']) if data.get('b_pct') is not None else None,
         a_odds_pct     = float(a_odds_pct) if a_odds_pct is not None else None,
         b_odds_pct     = float(b_odds_pct) if b_odds_pct is not None else None,
         is_upset_alert = is_upset,
@@ -632,10 +636,16 @@ def vs_vegas():
             vegas_correct += 1
     vegas_rate = round(vegas_correct / len(odds_picks) * 100) if odds_picks else None
 
+    diff = (ai_rate - vegas_rate) if (ai_rate and vegas_rate) else None
+    verdict = 'win' if (diff and diff > 0) else ('loss' if (diff and diff < 0) else 'tie')
+
     return render_template('vs_vegas.html',
         picks=picks, total=total,
         ai_rate=ai_rate, vegas_rate=vegas_rate,
-        ai_correct=ai_correct, vegas_correct=vegas_correct
+        ai_correct=ai_correct, vegas_correct=vegas_correct,
+        odds_count=len(odds_picks),
+        diff=abs(diff) if diff else None,
+        verdict=verdict,
     )
 
 # ── Trending + Accuracy API ───────────────────────────────────────────────────
@@ -668,6 +678,14 @@ def api_accuracy():
 
 # ── Upcoming Events ───────────────────────────────────────────────────────────
 
+ESPN_DISPLAY_NAMES = {
+    'nba': 'NBA', 'nfl': 'NFL', 'mlb': 'MLB', 'nhl': 'NHL',
+    'nfl_preseason': 'NFL Preseason', 'wnba': 'WNBA',
+    'usa.1': 'MLS', 'nba_dleague': 'G League',
+    'ufc': 'UFC', 'boxing': 'Boxing',
+    'ncaaf': 'NCAAF', 'ncaab': 'NCAAB',
+}
+
 def fetch_espn_events(sport, league):
     try:
         url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard"
@@ -675,6 +693,7 @@ def fetch_espn_events(sport, league):
         res = urllib.request.urlopen(req, timeout=6)
         data = json.loads(res.read())
         events = []
+        display = ESPN_DISPLAY_NAMES.get(league, league.upper().replace('_', ' ').replace('.', ' '))
         for ev in data.get('events', [])[:3]:
             comps = ev.get('competitions', [{}])[0].get('competitors', [])
             if len(comps) >= 2:
@@ -684,7 +703,8 @@ def fetch_espn_events(sport, league):
                     dt = datetime.strptime(date_str[:10], '%Y-%m-%d').strftime('%b %d')
                 except Exception:
                     dt = ''
-                events.append({'sport': league.upper().replace('.', ' '), 'comp_a': names[0], 'comp_b': names[1] if len(names) > 1 else '', 'date': dt})
+                if names[0] and len(names) > 1 and names[1]:
+                    events.append({'sport': display, 'comp_a': names[0], 'comp_b': names[1], 'date': dt})
         return events
     except Exception:
         return []

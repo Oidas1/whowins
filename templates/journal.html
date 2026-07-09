@@ -4,12 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WhoWins — My Journal</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <header>
   <a href="/" class="logo">🏆 WhoWins</a>
   <nav class="header-nav">
+    <a href="/vs-vegas" class="nav-link">vs Vegas</a>
     <a href="/leaderboard" class="nav-link">Leaderboard</a>
     <a href="/journal" class="nav-link active">Journal</a>
     <a href="/logout" class="nav-link">Logout</a>
@@ -21,11 +23,12 @@
 
     {% if entries %}
 
-    {% set wins   = entries|selectattr('outcome','equalto','win') |list|length %}
-    {% set losses = entries|selectattr('outcome','equalto','loss')|list|length %}
-    {% set total  = entries|length %}
+    {% set wins    = entries|selectattr('outcome','equalto','win')|list|length %}
+    {% set losses  = entries|selectattr('outcome','equalto','loss')|list|length %}
+    {% set total   = entries|length %}
     {% set settled = wins + losses %}
 
+    <!-- Stats -->
     <div class="journal-stats">
       <div class="stat-box">
         <span class="stat-num">{{ total }}</span>
@@ -45,9 +48,36 @@
       </div>
     </div>
 
-    <div class="journal-list">
+    <!-- Best picks -->
+    {% set best = entries|selectattr('outcome','equalto','win')|selectattr('confidence','equalto','High')|list %}
+    {% if best %}
+    <div class="best-picks">
+      <div class="below-label">⭐ Best Picks</div>
+      <div class="best-list">
+        {% for b in best[:3] %}
+        <div class="best-card">
+          <span class="sport-tag">{{ b.sport }}</span>
+          <span class="best-name" style="text-transform:capitalize">{{ b.winner }}</span>
+          <span class="conf-badge conf-high">High ✓</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="filterJournal('all', this)">All ({{ total }})</button>
+      <button class="filter-btn" onclick="filterJournal('win', this)">Wins ({{ wins }})</button>
+      <button class="filter-btn" onclick="filterJournal('loss', this)">Losses ({{ losses }})</button>
+      <button class="filter-btn" onclick="filterJournal('pending', this)">Pending ({{ total - settled }})</button>
+    </div>
+
+    <!-- Entries -->
+    <div class="journal-list" id="journalList">
       {% for e in entries %}
-      <div class="journal-card {% if e.outcome == 'win' %}card-win{% elif e.outcome == 'loss' %}card-loss{% endif %}">
+      <div class="journal-card {% if e.outcome == 'win' %}card-win{% elif e.outcome == 'loss' %}card-loss{% endif %}"
+           data-outcome="{{ e.outcome }}">
 
         <div class="journal-card-top">
           <div class="journal-meta">
@@ -69,13 +99,19 @@
         <div class="pick-row">
           <span class="pick-label">Pick:</span>
           <span class="pick-name">{{ e.winner }}</span>
-          {% if e.confidence %}
-          <span class="conf-badge conf-{{ e.confidence|lower }}">{{ e.confidence }}</span>
+          {% if e.confidence %}<span class="conf-badge conf-{{ e.confidence|lower }}">{{ e.confidence }}</span>{% endif %}
+          {% if e.ai_a_pct %}
+            <span class="pick-pct">
+              {% if e.winner and e.competitor_a and e.winner.lower() in e.competitor_a.lower() %}
+                {{ e.ai_a_pct }}%
+              {% elif e.ai_b_pct %}
+                {{ e.ai_b_pct }}%
+              {% endif %}
+            </span>
           {% endif %}
         </div>
         {% endif %}
 
-        <!-- Outcome buttons -->
         <div class="outcome-row">
           {% if e.outcome == 'pending' %}
             <span class="outcome-label">Mark result:</span>
@@ -106,6 +142,11 @@
       {% endfor %}
     </div>
 
+    <!-- Show more -->
+    <div id="showMoreWrap" style="text-align:center;display:none">
+      <button class="btn-action" onclick="showMore()">Show more</button>
+    </div>
+
     {% else %}
     <div class="empty-journal">
       <p>📋 No lookups yet.</p>
@@ -115,5 +156,50 @@
 
   </div>
 </main>
+
+<script>
+const PAGE_SIZE = 20;
+let showing = PAGE_SIZE;
+const allCards = () => document.querySelectorAll('.journal-card');
+let currentFilter = 'all';
+
+function filterJournal(outcome, btn) {
+  currentFilter = outcome;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  showing = PAGE_SIZE;
+  applyFilter();
+}
+
+function applyFilter() {
+  const cards = allCards();
+  let shown = 0;
+  cards.forEach(card => {
+    const match = currentFilter === 'all' || card.dataset.outcome === currentFilter;
+    if (match && shown < showing) {
+      card.style.display = '';
+      shown++;
+    } else {
+      card.style.display = 'none';
+    }
+  });
+  const total = Array.from(cards).filter(c => currentFilter === 'all' || c.dataset.outcome === currentFilter).length;
+  const wrap = document.getElementById('showMoreWrap');
+  if (wrap) wrap.style.display = shown < total ? 'block' : 'none';
+}
+
+function showMore() {
+  showing += PAGE_SIZE;
+  applyFilter();
+}
+
+// Initial pagination
+window.addEventListener('DOMContentLoaded', () => {
+  const cards = allCards();
+  if (cards.length > PAGE_SIZE) {
+    applyFilter();
+  }
+});
+</script>
 </body>
 </html>

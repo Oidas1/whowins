@@ -159,10 +159,11 @@ function animateCount(elId, target, suffix = '') {
 
 async function shareImage() {
   if (!resultData) return;
-  const btn = document.querySelector('[onclick="shareImage()"]');
+  const btn = document.getElementById('shareBtn');
   const orig = btn.textContent;
-  btn.textContent = 'Generating…';
+  btn.textContent = '⏳ Generating…';
   btn.disabled = true;
+  btn.style.opacity = '0.6';
 
   try {
     const res = await fetch('/share/image', {
@@ -202,6 +203,7 @@ async function shareImage() {
   } finally {
     btn.textContent = orig;
     btn.disabled = false;
+    btn.style.opacity = '';
   }
 }
 
@@ -289,7 +291,13 @@ function showLoading(comp1, comp2) {
 function showError(msg) {
   document.getElementById('loadingSection').style.display = 'none';
   document.getElementById('formSection').style.display    = 'block';
-  alert('Error: ' + msg);
+  const el = document.getElementById('inlineError');
+  if (el) {
+    el.textContent = '⚠️ ' + msg.replace('ERROR: ', '');
+    el.style.display = 'block';
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => { el.style.display = 'none'; }, 6000);
+  }
 }
 
 function newSearch() {
@@ -371,6 +379,7 @@ async function saveToJournal(sport, comp1, comp2, analysis, prediction, odds) {
     const payload = {
       sport, comp1, comp2, analysis,
       a_pct: prediction?.aPct,
+      b_pct: prediction?.bPct,
       a_odds_pct: (odds?.found && odds?.a_pct) ? odds.a_pct : null,
       b_odds_pct: (odds?.found && odds?.b_pct) ? odds.b_pct : null,
     };

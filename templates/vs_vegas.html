@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WhoWins — Model vs. Vegas</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -26,31 +27,28 @@
     </div>
 
     {% if total %}
+
     <div class="vv-scoreboard">
       <div class="vv-side vv-ai">
         <div class="vv-label">🤖 WhoWins AI</div>
         <div class="vv-big-pct">{{ ai_rate }}%</div>
         <div class="vv-record">{{ ai_correct }}W / {{ total - ai_correct }}L</div>
+        <div class="vv-note">{{ total }} settled picks</div>
       </div>
-      <div class="vv-divider">
-        <div class="vv-vs">vs</div>
-      </div>
+      <div class="vv-divider"><div class="vv-vs">vs</div></div>
       <div class="vv-side vv-vegas">
         <div class="vv-label">🎰 Vegas</div>
-        <div class="vv-big-pct">{{ vegas_rate }}%</div>
-        <div class="vv-record">{{ vegas_correct }}W / {{ total - vegas_correct }}L</div>
+        <div class="vv-big-pct">{% if vegas_rate %}{{ vegas_rate }}%{% else %}—{% endif %}</div>
+        <div class="vv-record">{% if vegas_rate %}{{ vegas_correct }}W / {{ odds_count - vegas_correct }}L{% else %}No odds data yet{% endif %}</div>
+        <div class="vv-note">{% if odds_count %}{{ odds_count }} picks with odds{% else %}Add Odds API key to track{% endif %}</div>
       </div>
     </div>
 
-    {% if ai_rate and vegas_rate %}
-    <div class="vv-verdict {% if ai_rate > vegas_rate %}vv-win{% elif ai_rate < vegas_rate %}vv-loss{% else %}vv-tie{% endif %}">
-      {% if ai_rate > vegas_rate %}
-        🏆 The Model is beating Vegas by {{ ai_rate - vegas_rate }} points
-      {% elif ai_rate < vegas_rate %}
-        📊 Vegas leads by {{ vegas_rate - ai_rate }} points — keep tracking
-      {% else %}
-        ⚖️ Dead even with Vegas
-      {% endif %}
+    {% if diff is not none %}
+    <div class="vv-verdict vv-{{ verdict }}">
+      {% if verdict == 'win' %}🏆 The Model is beating Vegas by {{ diff }} points
+      {% elif verdict == 'loss' %}📊 Vegas leads by {{ diff }} points — keep tracking
+      {% else %}⚖️ Dead even with Vegas{% endif %}
     </div>
     {% endif %}
 
@@ -69,40 +67,31 @@
         </thead>
         <tbody>
           {% for p in picks %}
-          {% set ai_pct = p.a_odds_pct %}
-          {% set veg_pct = p.a_odds_pct %}
+          {% set winner_is_a = p.winner and p.competitor_a and p.winner.lower() in p.competitor_a.lower() %}
           <tr>
             <td style="text-transform:capitalize">{{ p.competitor_a }} vs {{ p.competitor_b }}</td>
             <td><span class="sport-tag">{{ p.sport }}</span></td>
             <td style="text-transform:capitalize;font-weight:700">{{ p.winner or '—' }}</td>
             <td>
-              {% if p.a_odds_pct %}
-                {% if p.winner and p.competitor_a and p.winner.lower() in p.competitor_a.lower() %}
-                  <span class="win-cell">{{ p.a_odds_pct|round|int }}%</span>
-                {% else %}
-                  {{ (100 - p.a_odds_pct)|round|int }}%
-                {% endif %}
+              {% if winner_is_a and p.ai_a_pct %}
+                <span class="win-cell">{{ p.ai_a_pct }}%</span>
+              {% elif not winner_is_a and p.ai_b_pct %}
+                <span class="win-cell">{{ p.ai_b_pct }}%</span>
               {% else %}—{% endif %}
             </td>
             <td>
-              {% if p.a_odds_pct %}
-                {% if p.winner and p.competitor_a and p.winner.lower() in p.competitor_a.lower() %}
-                  {{ p.a_odds_pct|round|int }}%
-                {% else %}
-                  {{ (100 - p.a_odds_pct)|round|int }}%
-                {% endif %}
+              {% if winner_is_a and p.a_odds_pct %}
+                {{ p.a_odds_pct|round|int }}%
+              {% elif not winner_is_a and p.b_odds_pct %}
+                {{ p.b_odds_pct|round|int }}%
               {% else %}—{% endif %}
             </td>
             <td>
-              {% if p.outcome == 'win' %}
-                <span class="outcome-badge outcome-win">✓ Won</span>
-              {% else %}
-                <span class="outcome-badge outcome-loss">✗ Lost</span>
-              {% endif %}
+              {% if p.outcome == 'win' %}<span class="outcome-badge outcome-win">✓ Won</span>
+              {% else %}<span class="outcome-badge outcome-loss">✗ Lost</span>{% endif %}
             </td>
             <td>
-              {% if p.is_upset_alert %}
-                <span class="upset-badge">⚡ Upset</span>
+              {% if p.is_upset_alert %}<span class="upset-badge">⚡ Upset</span>
               {% else %}—{% endif %}
             </td>
           </tr>
@@ -113,12 +102,11 @@
 
     {% else %}
     <div class="empty-journal">
-      <p>📊 No settled predictions with odds data yet.</p>
-      <p style="font-size:0.85rem;">Run a prediction, add your Odds API key, then mark the result in your journal.</p>
+      <p>📊 No settled predictions yet.</p>
+      <p style="font-size:0.85rem;">Run predictions and mark their results in your Journal to start tracking.</p>
       <a href="/" class="btn-new">Run a prediction →</a>
     </div>
     {% endif %}
-
   </div>
 </main>
 </body>
