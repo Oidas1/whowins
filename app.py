@@ -99,28 +99,33 @@ def rotate_password():
     return new_pw
 
 def _sync_to_render(new_pw):
+    """Read current Render env vars, update only SITE_PASSWORD, write back."""
     if not RENDER_API_KEY or not RENDER_SERVICE_ID:
         return
     try:
-        payload = json.dumps([
-            {"key": "ANTHROPIC_API_KEY",  "value": os.environ.get('ANTHROPIC_API_KEY', '')},
-            {"key": "TAVILY_API_KEY",     "value": os.environ.get('TAVILY_API_KEY', '')},
-            {"key": "PYTHON_VERSION",     "value": "3.11.6"},
-            {"key": "SECRET_KEY",         "value": os.environ.get('SECRET_KEY', '')},
-            {"key": "SITE_PASSWORD",      "value": new_pw},
-            {"key": "ADMIN_KEY",          "value": os.environ.get('ADMIN_KEY', '')},
-            {"key": "RENDER_API_KEY",     "value": RENDER_API_KEY},
-            {"key": "RENDER_SERVICE_ID",  "value": RENDER_SERVICE_ID},
-            {"key": "DATABASE_URL",       "value": os.environ.get('DATABASE_URL', '')},
-        ]).encode()
-        req = urllib.request.Request(
-            f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/env-vars",
-            data=payload,
-            headers={"Authorization": f"Bearer {RENDER_API_KEY}",
-                     "Content-Type": "application/json", "Accept": "application/json"},
-            method="PUT",
+        base_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/env-vars"
+        headers  = {"Authorization": f"Bearer {RENDER_API_KEY}",
+                    "Accept": "application/json", "Content-Type": "application/json"}
+
+        # Fetch current list
+        get_req  = urllib.request.Request(base_url, headers=headers)
+        current  = json.loads(urllib.request.urlopen(get_req, timeout=8).read())
+        env_list = [e['envVar'] for e in current]
+
+        # Patch only SITE_PASSWORD
+        patched = False
+        for item in env_list:
+            if item['key'] == 'SITE_PASSWORD':
+                item['value'] = new_pw
+                patched = True
+        if not patched:
+            env_list.append({'key': 'SITE_PASSWORD', 'value': new_pw})
+
+        put_req = urllib.request.Request(
+            base_url, data=json.dumps(env_list).encode(),
+            headers=headers, method="PUT"
         )
-        urllib.request.urlopen(req, timeout=10)
+        urllib.request.urlopen(put_req, timeout=10)
     except Exception:
         pass
 
