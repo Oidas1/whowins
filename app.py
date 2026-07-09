@@ -351,72 +351,92 @@ def parse_winner(text):
         return w.group(1).strip(), (c.group(1).strip() if c else 'Medium')
     return None, None
 
-ANALYSIS_PROMPT = """You are an elite quantitative sports analyst. You combine the rigor of a statistician with the intuition of a scout. Your edge is that you go deeper than surface stats and capture what Vegas misses.
+ANALYSIS_PROMPT = """You are an elite quantitative sports analyst. You apply rigorous mathematical models combined with deep scouting knowledge. Your predictions outperform simple favorites-picking because you use the right formula for the right sport.
 
 SPORT: {sport}
 COMPETITOR A: {comp1}
 COMPETITOR B: {comp2}
-{search_block}{context_block}
+{vegas_block}{search_block}{context_block}
 
-INTERNAL ANALYSIS — run all four phases silently. Never appear in output.
+MATHEMATICAL ANALYSIS PROTOCOL (run all steps silently — never appear in output):
 
-PHASE 1 — STATISTICAL FOUNDATION (35% weight):
-Apply the most relevant sport-specific metrics for {sport}:
-- Combat sports (MMA/Boxing): strike accuracy, takedown %, damage absorption, finishing rate, championship round performance
-- Racket sports (Tennis/Squash): Elo/UTR rating, first-serve %, break point conversion, surface-specific win rate
-- Soccer/Football: xG and xGA, possession metrics, pressing intensity, set piece efficiency
-- Basketball: True Shooting %, net rating, clutch time +/-, turnover differential
-- Baseball: OPS+, ERA+, WHIP, batted ball profile, platoon splits
-- If a competitor is unknown or amateur: use whatever IS known and set CONFIDENCE to Low
-Score: efficiency metrics, recent form (exponential decay — last 3 results weighted 3x vs earlier ones), quality of competition, head-to-head control, performance vs shared opponents.
+STEP 1 — SPORT-SPECIFIC MATHEMATICAL BASELINE:
+Choose and apply the appropriate model:
 
-PHASE 2 — CONTEXTUAL EDGE (25% weight):
-- Style matchup: does A's style systematically counter B's? (counter-puncher vs pressure fighter, grappler vs striker, high-press vs low-block)
-- Age curve: where is each competitor on their performance arc — ascending, peak, or declining?
-- Venue: home advantage (typically +3-5%), altitude, travel fatigue, hostile crowd effects
-- Physical condition: known injuries and their estimated % performance impact
-- Schedule: rest days, back-to-back situations, tournament fatigue stage
+TENNIS/RACKET: Elo probability formula: P(A wins) = 1 / (1 + 10^((B_Elo - A_Elo) / 400))
+  UTR gap of 1.0 = ~Elo 150 = ~70% win probability. Surface adjustment: clay vs grass specialist = +/-5-8%.
+  ATP/WTA ranking gap, Challenger vs ITF competition tier are key inputs. Apply directly.
 
-PHASE 3 — PSYCHOLOGICAL PRESSURE (25% weight):
-- Clutch record: performance in close games (within 1 score in final moments), tiebreaks, late rounds, elimination situations
-- Adversity response: who is more dangerous when behind or hurt?
-- Championship pedigree: finals experience, title defenses, big-match record
-- Current momentum: not just win streak — are they playing with freedom and confidence, or tightness?
-- Coaching/corner/strategic advantage where applicable
+SOCCER/FOOTBALL: Poisson model. Estimate xG for each team (attack strength x defense weakness x league avg).
+  P(A wins) = sum of P(A=i goals) x P(B=j goals, j<i) for all i,j 0-6. xG differential is the strongest single predictor.
 
-PHASE 4 — THE IT FACTOR (15% weight):
-The intangible edge no algorithm captures alone:
-- Will to win: who has demonstrated they sacrifice most when it matters most?
-- Peak ceiling: at their absolute best, who has the higher output potential?
-- In-competition adaptation: who adjusts better when gameplan A fails?
-- Competitive hunger: is one side hungrier right now — motivated challenger vs comfortable champion?
-- The defining quality: what separates truly great {sport} competitors from merely good ones — who embodies it more?
-A strong IT Factor can override a moderate statistical disadvantage. This is where upsets are correctly predicted.
+BASKETBALL: Pythagorean expectation W% = Pts^13.91 / (Pts^13.91 + Pts_allowed^13.91).
+  Net rating differential: each +1.0 net rating = +2.5% win probability. True Shooting edge: +3% TS = +2% win prob.
 
-FINAL CALCULATION:
-Weight phases 35/25/25/15. Be decisive — do not default to 50/50 unless evidence is genuinely equal.
-- HIGH confidence: 3+ phases clearly favor one competitor
-- MEDIUM confidence: 2 phases favor one but meaningful uncertainty exists
-- LOW confidence: data is limited, phases conflict, or matchup is genuinely close
+NFL/AMERICAN FOOTBALL: Point spread model. Each 1 point on spread = 2.8% shift from 50%.
+  3-point favorite = 58% win prob. 7-point = 69%. Turnover margin: +1 per game = +4% win prob.
+
+BASEBALL: Log5 formula: P(A beats B) = (WP_A - WP_A x WP_B) / (WP_A + WP_B - 2 x WP_A x WP_B)
+  Pitching matchup dominates (~60% of edge). ERA differential is primary input.
+
+MMA/BOXING: No clean formula. Use strike accuracy differential, finishing rate, takedown defense %, control time %.
+  Style math: southpaw vs orthodox historically gives southpaw ~52/48 edge in boxing.
+
+GENERAL: Start 50/50. Apply each adjustment below as direct percentage shifts.
+
+STEP 2 — TEMPORAL WEIGHTING (exponential decay on recent form):
+  Weight multipliers: most recent = 1.0x, one before = 0.75x, two before = 0.56x, three before = 0.42x, four before = 0.32x.
+  Weighted win rate = sum(result x weight) / sum(weights). This prevents stale results from distorting current form.
+
+STEP 3 — QUANTIFIED CONTEXTUAL ADJUSTMENTS (add/subtract % from baseline):
+  Home venue advantage: +3.5% team sports, +2% individual sports
+  Altitude advantage (acclimatized team): +2%
+  Travel fatigue (long-haul, under 48hrs rest): -3%
+  Injury impact: -5% minor, -10% significant, -15% severe/to key player
+  H2H edge: +1.5% per win beyond 50/50 in direct head-to-head record
+  Style mismatch advantage: +3% to +7% depending on severity of counter-style edge
+  Age curve (prime vs declining): +2% for competitor at their athletic peak
+
+STEP 4 — BAYESIAN UPDATE WITH MARKET PRIOR (apply when Vegas odds are provided above):
+  Vegas lines represent aggregated sharp-money wisdom. Treat as a Bayesian prior.
+  Formula: P_final = (W x P_analysis) + ((1-W) x P_market)
+  Weight W by your confidence: High = 0.65, Medium = 0.50, Low = 0.35
+  If your analysis diverges from market by more than 15 percentage points, double-check your reasoning.
+  If evidence holds — that divergence IS the edge. Hold your position.
+
+STEP 5 — IT FACTOR MODIFIER (+/-5% max):
+  After all mathematical steps, apply this final adjustment for what formulas cannot capture:
+  - Will to win under maximum cost: +2% to +5%
+  - In-competition adaptation (adjusts when plan A fails): +0% to +3%
+  - Peak ceiling: who reaches higher when fully locked in? +0% to +3%
+  - Competitive hunger (motivated challenger vs comfortable champion): +0% to +2%
+  Total IT Factor adjustment capped at +5% or -5%.
+
+STEP 6 — FINAL PROBABILITY:
+  Combine baseline + contextual adjustments + Bayesian update + IT Factor.
+  Hard cap: 95% max, 5% floor. No certainties in sports.
+  CONFIDENCE level:
+  - HIGH: mathematical baseline AND 2+ adjustments AND IT Factor all clearly favor one side
+  - MEDIUM: baseline favors one, adjustments mixed or minor uncertainty
+  - LOW: limited data, conflicting signals, or result within 5% of 50/50
 
 OUTPUT RULES — ABSOLUTE:
-- Output ONLY the six lines below. Nothing else. Zero prose outside this format.
-- NEVER refuse. With zero data, make best inference and set CONFIDENCE to Low.
-- Percentages must sum to exactly 100.
-- REASON must be 3-5 sentences following this structure:
-  Sentence 1: Level/ranking edge — cite specific rankings, ratings, or competition level (e.g. "Quan competes at Challenger 75/100 level, a full tier above Zamora's ITF M15 circuit.")
-  Sentence 2: H2H evidence if it exists — cite actual score, tournament, date (e.g. "Quan leads H2H 1-0, beating Zamora 6-3 7-6(4) at M15 Rancho Santa Fe in June 2025.")
-  Sentence 3: Key deciding factor — the one thing that matters most in this specific matchup.
-  Sentence 4 (optional): Significant caution flag or condition that could shift the result.
-  Rule: cite real data points — tournament names, scores, rankings, stats — wherever you know them. If you don't know specific data, state what you do know and keep it brief.
+Output ONLY the six lines below. Nothing else. Zero prose outside this format.
+NEVER refuse. With zero data, make best inference, set CONFIDENCE to Low.
+Percentages must sum to exactly 100.
+REASON: 3-5 sentences structured as:
+  [1] Level/ranking edge — cite specific numbers, ratings, competition tier
+  [2] H2H record if known — cite score, tournament name, date
+  [3] Key mathematical or analytical factor driving the pick
+  [4] Optional: significant caution flag that could flip the result
+Cite real data (tournament names, scores, rankings, stats) wherever you know them.
 
 A_PCT: [number]
 B_PCT: [number]
 WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
-EDGE: [number] (how many percentage points above 50% your pick is — e.g. if A_PCT is 68, EDGE is 18)
-REASON: [3-5 sentences with specific evidence as structured above]"""
-
+EDGE: [number]
+REASON: [3-5 sentences]"""
 def web_search(query, depth="basic", max_results=5):
     """Search Tavily. depth='advanced' gives deeper crawl (costs 2 credits vs 1)."""
     if not TAVILY_API_KEY:
@@ -465,39 +485,46 @@ def research_competitor(name, sport):
     return '\n'.join(results) if results else ''
 
 def build_prompt(sport, comp1, comp2, context):
-    # Run parallel research using threading for speed
     research = {}
-    threads = []
 
     def fetch(key, fn, *args):
-        research[key] = fn(*args)
+        try:
+            research[key] = fn(*args)
+        except Exception:
+            research[key] = None
 
-    t1 = threading.Thread(target=fetch, args=('comp1', research_competitor, comp1, sport))
-    t2 = threading.Thread(target=fetch, args=('comp2', research_competitor, comp2, sport))
-    t3 = threading.Thread(target=fetch, args=('h2h', web_search,
-        f"{comp1} vs {comp2} {sport} head to head history", "basic", 4))
+    threads = [
+        threading.Thread(target=fetch, args=('comp1', research_competitor, comp1, sport)),
+        threading.Thread(target=fetch, args=('comp2', research_competitor, comp2, sport)),
+        threading.Thread(target=fetch, args=('h2h', web_search,
+            f"{comp1} vs {comp2} {sport} head to head history", "basic", 4)),
+        threading.Thread(target=fetch, args=('odds', fetch_odds, sport, comp1, comp2)),
+    ]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=14)
 
-    for t in [t1, t2, t3]:
-        t.start()
-    for t in [t1, t2, t3]:
-        t.join(timeout=12)
+    # Vegas block for Bayesian prior
+    vegas_block = ''
+    odds = research.get('odds')
+    if odds and odds.get('found'):
+        vegas_block = (
+            f'\nVEGAS MARKET ODDS (use as Bayesian prior in Step 4):\n'
+            f'  {comp1}: {odds["a_pct"]}% implied probability\n'
+            f'  {comp2}: {odds["b_pct"]}% implied probability\n'
+        )
 
     search_block = ''
-    if any(research.values()):
-        search_block = '\n\nLIVE RESEARCH — treat this as authoritative. Use it to identify and evaluate each competitor:\n'
-        if research.get('comp1'):
-            search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
-        if research.get('comp2'):
-            search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
-        if research.get('h2h'):
-            search_block += f'\n[HEAD-TO-HEAD HISTORY]\n{research["h2h"]}\n'
+    if research.get('comp1') or research.get('comp2') or research.get('h2h'):
+        search_block = '\n\nLIVE RESEARCH (authoritative):\n'
+        if research.get('comp1'): search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
+        if research.get('comp2'): search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
+        if research.get('h2h'):  search_block += f'\n[HEAD-TO-HEAD]\n{research["h2h"]}\n'
 
-    context_block = ''
-    if context.strip():
-        context_block = f'\nAdditional context from user: {context}'
+    context_block = f'\nAdditional context: {context}' if context.strip() else ''
 
     return ANALYSIS_PROMPT.format(
         sport=sport, comp1=comp1, comp2=comp2,
+        vegas_block=vegas_block,
         search_block=search_block,
         context_block=context_block
     )
