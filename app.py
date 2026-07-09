@@ -492,6 +492,32 @@ SPORT_SEARCH_TERMS = {
     'golf': ['PGA Tour golf ranking OWGR', 'golf stats strokes gained'],
 }
 
+def fetch_utr(name):
+    """Query UTR Sports API for a player's singles UTR rating. Returns dict or None."""
+    try:
+        url = f"https://api.utrsports.net/v2/search?query={urllib.parse.quote(name)}&top=3&type=players"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'})
+        data = json.loads(urllib.request.urlopen(req, timeout=6).read())
+        hits = data.get('players', {}).get('hits', [])
+        if not hits:
+            return None
+        source = hits[0].get('source', {})
+        utr = source.get('singlesUtr') or source.get('threeMonthRating')
+        if not utr:
+            return None
+        return {
+            'name': source.get('displayName', name),
+            'utr': round(float(utr), 2),
+            'utr_status': source.get('ratingStatusSingles', ''),
+        }
+    except Exception:
+        return None
+
+def utr_win_probability(utr_a, utr_b):
+    """Elo-based win probability from UTR ratings. 1.0 UTR ≈ 150 Elo points."""
+    elo_diff = (utr_a - utr_b) * 150
+    return round(1 / (1 + 10 ** (-elo_diff / 400)) * 100, 1)
+
 def research_competitor(name, sport):
     """Run targeted searches for a competitor, using sport-specific terms."""
     sport_key = sport.lower().split()[0]
@@ -520,6 +546,8 @@ def build_prompt(sport, comp1, comp2, context):
         except Exception:
             research[key] = None
 
+    is_tennis = any(w in sport.lower() for w in ['tennis', 'atp', 'wta', 'itf', 'challenger', 'utr'])
+
     threads = [
         threading.Thread(target=fetch, args=('comp1', research_competitor, comp1, sport)),
         threading.Thread(target=fetch, args=('comp2', research_competitor, comp2, sport)),
@@ -527,8 +555,29 @@ def build_prompt(sport, comp1, comp2, context):
             f"{comp1} vs {comp2} {sport} head to head history", "basic", 4)),
         threading.Thread(target=fetch, args=('odds', fetch_odds, sport, comp1, comp2)),
     ]
+    if is_tennis:
+        threads += [
+            threading.Thread(target=fetch, args=('utr1', fetch_utr, comp1)),
+            threading.Thread(target=fetch, args=('utr2', fetch_utr, comp2)),
+        ]
     for t in threads: t.start()
     for t in threads: t.join(timeout=14)
+
+    # UTR block for tennis
+    utr_block = ''
+    if is_tennis:
+        u1 = research.get('utr1')
+        u2 = research.get('utr2')
+        if u1 or u2:
+            utr_block = '\nLIVE UTR RATINGS (from UTR Sports database — use these as your Elo baseline):\n'
+            if u1:
+                utr_block += f'  {comp1}: UTR {u1["utr"]} ({u1["utr_status"]})\n'
+            if u2:
+                utr_block += f'  {comp2}: UTR {u2["utr"]} ({u2["utr_status"]})\n'
+            if u1 and u2:
+                pct = utr_win_probability(u1['utr'], u2['utr'])
+                utr_block += f'  Elo-based win probability from UTR gap: {comp1} {pct}% / {comp2} {round(100-pct, 1)}%\n'
+                utr_block += f'  (Formula: P = 1/(1+10^((UTR_B - UTR_A) x 150 / 400)))\n'
 
     # Vegas block for Bayesian prior
     vegas_block = ''
@@ -540,9 +589,9 @@ def build_prompt(sport, comp1, comp2, context):
             f'  {comp2}: {odds["b_pct"]}% implied probability\n'
         )
 
-    search_block = ''
+    search_block = utr_block  # UTR data takes priority for tennis
     if research.get('comp1') or research.get('comp2') or research.get('h2h'):
-        search_block = '\n\nSUPPLEMENTAL LIVE RESEARCH (use to verify or update what you already know — your training knowledge takes priority):\n'
+        search_block += '\n\nSUPPLEMENTAL RESEARCH (use to verify/update training knowledge):\n'
         if research.get('comp1'): search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
         if research.get('comp2'): search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
         if research.get('h2h'):  search_block += f'\n[HEAD-TO-HEAD]\n{research["h2h"]}\n'
