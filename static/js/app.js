@@ -71,7 +71,13 @@ document.getElementById('matchupForm').addEventListener('submit', async (e) => {
 
     resultData = parse(fullText);
     render(resultData);
-    saveToJournal(currentSport, currentComp1, currentComp2, fullText);
+
+    // Fetch odds in parallel with saving
+    const oddsData = await loadOdds(currentSport, currentComp1, currentComp2);
+    if (oddsData && oddsData.found) {
+      renderOdds(oddsData, resultData);
+    }
+    saveToJournal(currentSport, currentComp1, currentComp2, fullText, resultData, oddsData);
 
   } catch (err) {
     showError('Something went wrong. Please try again.');
@@ -171,13 +177,27 @@ async function shareImage() {
     });
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
-    const preview = document.getElementById('sharePreview');
-    document.getElementById('shareImg').src = url;
-    document.getElementById('shareDownload').href = url;
-    preview.style.display = 'block';
-    preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  } catch (_) {
-    alert('Could not generate share card. Try again.');
+
+    // Try native share (iOS/Android) — supports Instagram Stories
+    if (navigator.canShare && navigator.canShare({ files: [new File([blob], 'whowins.png', { type: 'image/png' })] })) {
+      const file = new File([blob], 'whowins-prediction.png', { type: 'image/png' });
+      await navigator.share({
+        files: [file],
+        title: `${currentComp1} vs ${currentComp2}`,
+        text: `${currentComp1} ${resultData.aPct}% vs ${currentComp2} ${resultData.bPct}% — via WhoWins`,
+      });
+    } else {
+      // Fallback: show preview + download
+      const preview = document.getElementById('sharePreview');
+      document.getElementById('shareImg').src = url;
+      document.getElementById('shareDownload').href = url;
+      preview.style.display = 'block';
+      preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      alert('Could not generate share card. Try again.');
+    }
   } finally {
     btn.textContent = orig;
     btn.disabled = false;
@@ -287,13 +307,76 @@ function copyResult() {
   });
 }
 
-async function saveToJournal(sport, comp1, comp2, analysis) {
+// ── Odds ──────────────────────────────────────────
+
+async function loadOdds(sport, comp1, comp2) {
+  try {
+    const params = new URLSearchParams({ sport, comp1, comp2 });
+    const res = await fetch('/api/odds?' + params);
+    return await res.json();
+  } catch (_) { return null; }
+}
+
+function renderOdds(odds, prediction) {
+  const existing = document.getElementById('oddsSection');
+  if (existing) existing.remove();
+
+  const aWins = prediction.winner && (
+    prediction.winner.toLowerCase().includes(currentComp1.split(' ')[0].toLowerCase()) ||
+    currentComp1.toLowerCase().includes(prediction.winner.split(' ')[0].toLowerCase())
+  );
+
+  // Upset alert: AI backs the underdog
+  const aiPct    = aWins ? prediction.aPct : prediction.bPct;
+  const vegasPct = aWins ? odds.a_pct : odds.b_pct;
+  const isUpset  = aiPct >= 55 && vegasPct <= 40;
+
+  const div = document.createElement('div');
+  div.id = 'oddsSection';
+  div.className = 'odds-card' + (isUpset ? ' odds-upset' : '');
+  div.innerHTML = `
+    ${isUpset ? '<div class="upset-alert">⚡ UPSET ALERT — AI backs the underdog</div>' : ''}
+    <div class="odds-header">
+      <span class="odds-label">Vegas Odds</span>
+      <span class="odds-sub">vs AI Prediction</span>
+    </div>
+    <div class="odds-row">
+      <div class="odds-col">
+        <div class="odds-name">${currentComp1}</div>
+        <div class="odds-compare">
+          <span class="odds-ai">${prediction.aPct}% <span class="odds-tag">AI</span></span>
+          <span class="odds-sep">·</span>
+          <span class="odds-veg">${odds.a_pct}% <span class="odds-tag">Vegas</span></span>
+        </div>
+      </div>
+      <div class="odds-col">
+        <div class="odds-name">${currentComp2}</div>
+        <div class="odds-compare">
+          <span class="odds-ai">${prediction.bPct}% <span class="odds-tag">AI</span></span>
+          <span class="odds-sep">·</span>
+          <span class="odds-veg">${odds.b_pct}% <span class="odds-tag">Vegas</span></span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const actions = document.querySelector('.result-actions');
+  actions.parentNode.insertBefore(div, actions);
+}
+
+async function saveToJournal(sport, comp1, comp2, analysis, prediction, odds) {
   if (!analysis || analysis.startsWith('ERROR')) return;
   try {
+    const payload = {
+      sport, comp1, comp2, analysis,
+      a_pct: prediction?.aPct,
+      a_odds_pct: (odds?.found && odds?.a_pct) ? odds.a_pct : null,
+      b_odds_pct: (odds?.found && odds?.b_pct) ? odds.b_pct : null,
+    };
     await fetch('/journal/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sport, comp1, comp2, analysis }),
+      body: JSON.stringify(payload),
     });
   } catch (_) {}
 }

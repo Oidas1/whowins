@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Model vs. Vegas</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/vs-vegas" class="nav-link active">vs Vegas</a>
+    <a href="/leaderboard" class="nav-link">Leaderboard</a>
+    <a href="/journal" class="nav-link">Journal</a>
+    <a href="/logout" class="nav-link">Logout</a>
+  </nav>
+</header>
+
+<main>
+  <div class="vv-wrap">
+
+    <div class="vv-header">
+      <h1 class="lb-title">Model vs. Vegas</h1>
+      <p class="lb-sub">How the AI stacks up against sportsbook odds</p>
+    </div>
+
+    {% if total %}
+    <div class="vv-scoreboard">
+      <div class="vv-side vv-ai">
+        <div class="vv-label">🤖 WhoWins AI</div>
+        <div class="vv-big-pct">{{ ai_rate }}%</div>
+        <div class="vv-record">{{ ai_correct }}W / {{ total - ai_correct }}L</div>
+      </div>
+      <div class="vv-divider">
+        <div class="vv-vs">vs</div>
+      </div>
+      <div class="vv-side vv-vegas">
+        <div class="vv-label">🎰 Vegas</div>
+        <div class="vv-big-pct">{{ vegas_rate }}%</div>
+        <div class="vv-record">{{ vegas_correct }}W / {{ total - vegas_correct }}L</div>
+      </div>
+    </div>
+
+    {% if ai_rate and vegas_rate %}
+    <div class="vv-verdict {% if ai_rate > vegas_rate %}vv-win{% elif ai_rate < vegas_rate %}vv-loss{% else %}vv-tie{% endif %}">
+      {% if ai_rate > vegas_rate %}
+        🏆 The Model is beating Vegas by {{ ai_rate - vegas_rate }} points
+      {% elif ai_rate < vegas_rate %}
+        📊 Vegas leads by {{ vegas_rate - ai_rate }} points — keep tracking
+      {% else %}
+        ⚖️ Dead even with Vegas
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="vv-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Matchup</th>
+            <th>Sport</th>
+            <th>AI Pick</th>
+            <th>AI %</th>
+            <th>Vegas %</th>
+            <th>Result</th>
+            <th>Edge</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in picks %}
+          {% set ai_pct = p.a_odds_pct %}
+          {% set veg_pct = p.a_odds_pct %}
+          <tr>
+            <td style="text-transform:capitalize">{{ p.competitor_a }} vs {{ p.competitor_b }}</td>
+            <td><span class="sport-tag">{{ p.sport }}</span></td>
+            <td style="text-transform:capitalize;font-weight:700">{{ p.winner or '—' }}</td>
+            <td>
+              {% if p.a_odds_pct %}
+                {% if p.winner and p.competitor_a and p.winner.lower() in p.competitor_a.lower() %}
+                  <span class="win-cell">{{ p.a_odds_pct|round|int }}%</span>
+                {% else %}
+                  {{ (100 - p.a_odds_pct)|round|int }}%
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if p.a_odds_pct %}
+                {% if p.winner and p.competitor_a and p.winner.lower() in p.competitor_a.lower() %}
+                  {{ p.a_odds_pct|round|int }}%
+                {% else %}
+                  {{ (100 - p.a_odds_pct)|round|int }}%
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if p.outcome == 'win' %}
+                <span class="outcome-badge outcome-win">✓ Won</span>
+              {% else %}
+                <span class="outcome-badge outcome-loss">✗ Lost</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if p.is_upset_alert %}
+                <span class="upset-badge">⚡ Upset</span>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <div class="empty-journal">
+      <p>📊 No settled predictions with odds data yet.</p>
+      <p style="font-size:0.85rem;">Run a prediction, add your Odds API key, then mark the result in your journal.</p>
+      <a href="/" class="btn-new">Run a prediction →</a>
+    </div>
+    {% endif %}
+
+  </div>
+</main>
+</body>
+</html>

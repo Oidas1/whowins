@@ -31,6 +31,7 @@ db = SQLAlchemy(app)
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 TAVILY_API_KEY    = os.environ.get('TAVILY_API_KEY', '')
+ODDS_API_KEY      = os.environ.get('ODDS_API_KEY', '')
 ADMIN_KEY         = os.environ.get('ADMIN_KEY', 'adminkey123')
 RENDER_API_KEY    = os.environ.get('RENDER_API_KEY', '')
 RENDER_SERVICE_ID = os.environ.get('RENDER_SERVICE_ID', '')
@@ -57,8 +58,11 @@ class Query(db.Model):
     winner       = db.Column(db.String(100))
     confidence   = db.Column(db.String(20))
     analysis     = db.Column(db.Text)
-    outcome      = db.Column(db.String(10), default='pending')  # pending / win / loss
-    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+    outcome        = db.Column(db.String(10), default='pending')  # pending / win / loss
+    a_odds_pct     = db.Column(db.Float, nullable=True)   # Vegas implied % for comp_a
+    b_odds_pct     = db.Column(db.Float, nullable=True)   # Vegas implied % for comp_b
+    is_upset_alert = db.Column(db.Boolean, default=False)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
     try:
@@ -233,18 +237,36 @@ def journal_save():
     analysis_text = data.get('analysis', '')
     winner, confidence = parse_winner(analysis_text)
 
+    a_odds_pct = data.get('a_odds_pct')
+    b_odds_pct = data.get('b_odds_pct')
+
+    # Detect upset alert: AI picks winner with 55%+ but Vegas only gives them ≤40%
+    is_upset = False
+    if a_odds_pct is not None and b_odds_pct is not None and winner:
+        comp1 = data.get('comp1', '')
+        ai_a_pct = int((data.get('a_pct') or 50))
+        vegas_a_pct = float(a_odds_pct)
+        winner_is_a = winner.lower().startswith(comp1.split()[0].lower()) if comp1 else False
+        if winner_is_a and ai_a_pct >= 55 and vegas_a_pct <= 40:
+            is_upset = True
+        elif not winner_is_a and (100 - ai_a_pct) >= 55 and (100 - vegas_a_pct) <= 40:
+            is_upset = True
+
     entry = Query(
-        user_uid     = get_user_uid(),
-        sport        = data.get('sport', '')[:100],
-        competitor_a = data.get('comp1', '')[:100],
-        competitor_b = data.get('comp2', '')[:100],
-        winner       = winner,
-        confidence   = confidence,
-        analysis     = analysis_text[:8000],
+        user_uid       = get_user_uid(),
+        sport          = data.get('sport', '')[:100],
+        competitor_a   = data.get('comp1', '')[:100],
+        competitor_b   = data.get('comp2', '')[:100],
+        winner         = winner,
+        confidence     = confidence,
+        analysis       = analysis_text[:8000],
+        a_odds_pct     = float(a_odds_pct) if a_odds_pct is not None else None,
+        b_odds_pct     = float(b_odds_pct) if b_odds_pct is not None else None,
+        is_upset_alert = is_upset,
     )
     db.session.add(entry)
     db.session.commit()
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'upset_alert': is_upset})
 
 @app.route('/journal/outcome/<int:entry_id>', methods=['POST'])
 def journal_outcome(entry_id):
@@ -406,6 +428,89 @@ def build_prompt(sport, comp1, comp2, context):
         context_block=context_block
     )
 
+# ── Odds API ──────────────────────────────────────────────────────────────────
+
+SPORT_KEY_MAP = {
+    'nba':'basketball_nba','basketball':'basketball_nba',
+    'nfl':'americanfootball_nfl','football':'americanfootball_nfl',
+    'mlb':'baseball_mlb','baseball':'baseball_mlb',
+    'nhl':'icehockey_nhl','hockey':'icehockey_nhl',
+    'mma':'mma_mixed_martial_arts','ufc':'mma_mixed_martial_arts',
+    'boxing':'boxing_boxing',
+    'mls':'soccer_usa_mls','soccer':'soccer_usa_mls',
+    'wnba':'basketball_wnba',
+    'ncaa basketball':'basketball_ncaab','college basketball':'basketball_ncaab',
+    'college football':'americanfootball_ncaaf',
+    'tennis':'tennis_atp_french_open',
+    'golf':'golf_pga_championship',
+}
+
+def american_to_pct(odds):
+    odds = float(odds)
+    if odds > 0:
+        return round(100 / (odds + 100) * 100, 1)
+    else:
+        return round(abs(odds) / (abs(odds) + 100) * 100, 1)
+
+def name_match(api_name, user_name):
+    a = api_name.lower().strip()
+    u = user_name.lower().strip()
+    return (u in a or a in u or
+            u.split()[-1] in a or a.split()[-1] in u)
+
+def fetch_odds(sport, comp1, comp2):
+    if not ODDS_API_KEY:
+        return None
+    sport_key = SPORT_KEY_MAP.get(sport.lower().strip(), sport.lower().replace(' ','_'))
+    try:
+        url = (f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
+               f"?apiKey={ODDS_API_KEY}&regions=us&markets=h2h&oddsFormat=american")
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        res = urllib.request.urlopen(req, timeout=8)
+        events = json.loads(res.read())
+    except Exception:
+        return None
+
+    for ev in events:
+        teams = [ev.get('home_team',''), ev.get('away_team','')]
+        if not (any(name_match(t, comp1) for t in teams) and
+                any(name_match(t, comp2) for t in teams)):
+            continue
+        # Collect odds across bookmakers
+        a_prices, b_prices = [], []
+        for bk in ev.get('bookmakers', [])[:5]:
+            for mkt in bk.get('markets', []):
+                if mkt.get('key') != 'h2h':
+                    continue
+                for outcome in mkt.get('outcomes', []):
+                    nm = outcome.get('name', '')
+                    pr = outcome.get('price', 0)
+                    if name_match(nm, comp1):
+                        a_prices.append(pr)
+                    elif name_match(nm, comp2):
+                        b_prices.append(pr)
+        if a_prices and b_prices:
+            a_pct = american_to_pct(sum(a_prices)/len(a_prices))
+            b_pct = american_to_pct(sum(b_prices)/len(b_prices))
+            # Normalize to 100%
+            total = a_pct + b_pct
+            a_pct = round(a_pct / total * 100, 1)
+            b_pct = round(b_pct / total * 100, 1)
+            return {'a_pct': a_pct, 'b_pct': b_pct, 'found': True}
+    return None
+
+@app.route('/api/odds')
+def api_odds():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    sport = request.args.get('sport', '')
+    comp1 = request.args.get('comp1', '')
+    comp2 = request.args.get('comp2', '')
+    result = fetch_odds(sport, comp1, comp2)
+    if result:
+        return jsonify(result)
+    return jsonify({'found': False})
+
 # ── Leaderboard ───────────────────────────────────────────────────────────────
 
 @app.route('/leaderboard')
@@ -418,23 +523,74 @@ def leaderboard():
     board = []
     for u in users:
         queries = Query.query.filter_by(user_uid=u.user_uid).all()
-        wins    = sum(1 for q in queries if q.outcome == 'win')
-        losses  = sum(1 for q in queries if q.outcome == 'loss')
+        settled_qs = sorted(
+            [q for q in queries if q.outcome in ('win','loss')],
+            key=lambda q: q.created_at
+        )
+        wins    = sum(1 for q in settled_qs if q.outcome == 'win')
+        losses  = len(settled_qs) - wins
         settled = wins + losses
         if settled < MIN_SETTLED:
             continue
         hit_rate = round((wins / settled) * 100)
+
+        # Current win streak (count consecutive wins from most recent)
+        streak = 0
+        for q in reversed(settled_qs):
+            if q.outcome == 'win':
+                streak += 1
+            else:
+                break
+        streak_badge = ''
+        if streak >= 10: streak_badge = '👑'
+        elif streak >= 5: streak_badge = '💀'
+        elif streak >= 3: streak_badge = '🔥'
+
         board.append({
-            'name':     get_display_name(u.user_uid),
-            'hit_rate': hit_rate,
-            'wins':     wins,
-            'losses':   losses,
-            'total':    len(queries),
-            'is_me':    u.user_uid == get_user_uid(),
+            'name':         get_display_name(u.user_uid),
+            'hit_rate':     hit_rate,
+            'wins':         wins,
+            'losses':       losses,
+            'total':        len(queries),
+            'streak':       streak,
+            'streak_badge': streak_badge,
+            'is_me':        u.user_uid == get_user_uid(),
         })
 
     board.sort(key=lambda x: (-x['hit_rate'], -x['wins']))
     return render_template('leaderboard.html', board=board)
+
+# ── Model vs. Vegas ───────────────────────────────────────────────────────────
+
+@app.route('/vs-vegas')
+def vs_vegas():
+    if not is_authed():
+        return redirect(url_for('login'))
+
+    picks = (Query.query
+             .filter(Query.outcome != 'pending')
+             .filter(Query.a_odds_pct != None)
+             .order_by(Query.created_at.desc())
+             .all())
+
+    total = len(picks)
+    ai_correct = sum(1 for p in picks if p.outcome == 'win')
+    vegas_correct = 0
+    for p in picks:
+        # Vegas favorite = whichever side has higher implied %
+        vegas_picked_a = (p.a_odds_pct or 0) >= (p.b_odds_pct or 0)
+        actual_win_a = p.outcome == 'win'
+        if vegas_picked_a == actual_win_a:
+            vegas_correct += 1
+
+    ai_rate    = round(ai_correct / total * 100) if total else None
+    vegas_rate = round(vegas_correct / total * 100) if total else None
+
+    return render_template('vs_vegas.html',
+        picks=picks, total=total,
+        ai_rate=ai_rate, vegas_rate=vegas_rate,
+        ai_correct=ai_correct, vegas_correct=vegas_correct
+    )
 
 # ── Trending + Accuracy API ───────────────────────────────────────────────────
 
