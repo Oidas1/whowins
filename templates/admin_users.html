@@ -29,6 +29,7 @@
       </div>
     </div>
 
+    <!-- Desktop table -->
     <div class="admin-table-wrap">
       <table class="admin-table">
         <thead>
@@ -58,6 +59,42 @@
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="admin-cards">
+      {% for u in users %}
+      <div class="admin-user-card">
+        <div class="admin-card-top">
+          <span class="uid-cell">{{ u.uid }}</span>
+          <span class="journal-date">Joined {{ u.joined }}</span>
+        </div>
+        <div class="admin-card-stats">
+          <div class="admin-stat">
+            <span class="admin-stat-num">{{ u.queries }}</span>
+            <span class="admin-stat-label">Lookups</span>
+          </div>
+          <div class="admin-stat">
+            <span class="admin-stat-num win-cell">{{ u.wins }}</span>
+            <span class="admin-stat-label">Wins</span>
+          </div>
+          <div class="admin-stat">
+            <span class="admin-stat-num loss-cell">{{ u.losses }}</span>
+            <span class="admin-stat-label">Losses</span>
+          </div>
+          <div class="admin-stat">
+            <span class="admin-stat-num">{{ u.referrals or '—' }}</span>
+            <span class="admin-stat-label">Referrals</span>
+          </div>
+        </div>
+        <div class="admin-card-meta">
+          <span>Last active: {{ u.last_seen }}</span>
+          {% if u.referred_by != '—' %}
+          <span>Referred by: <span class="uid-cell">{{ u.referred_by }}</span></span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
     </div>
 
   </div>

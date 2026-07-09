@@ -747,9 +747,57 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 
 .admin-table tr:last-child td { border-bottom: none; }
 
-.uid-cell { font-family: monospace; font-size: 0.78rem; color: var(--muted); }
+.uid-cell  { font-family: monospace; font-size: 0.78rem; color: var(--muted); }
 .win-cell  { color: var(--green); font-weight: 700; }
 .loss-cell { color: var(--red);   font-weight: 700; }
+
+/* Admin mobile cards (hidden on desktop) */
+.admin-cards { display: none; flex-direction: column; gap: 12px; }
+
+.admin-user-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-card-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  text-align: center;
+}
+
+.admin-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 8px 4px;
+}
+
+.admin-stat-num   { font-size: 1.2rem; font-weight: 900; }
+.admin-stat-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.admin-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
 
 /* ── Login ───────────────────────────────────────── */
 .login-card {
@@ -803,4 +851,8 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   .comp-pct        { font-size: 2.6rem; }
   .journal-stats   { flex-direction: column; }
   .sections-grid   { grid-template-columns: 1fr; }
+
+  /* Admin: hide table, show cards */
+  .admin-table-wrap { display: none; }
+  .admin-cards      { display: flex; }
 }
