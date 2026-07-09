@@ -173,6 +173,7 @@ async function shareImage() {
         sport: currentSport,
         a_pct: resultData.aPct, b_pct: resultData.bPct,
         winner: resultData.winner, confidence: resultData.confidence,
+        reason: resultData.reason || '',
       }),
     });
     const blob = await res.blob();

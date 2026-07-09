@@ -576,22 +576,21 @@ def vs_vegas():
 
     picks = (Query.query
              .filter(Query.outcome != 'pending')
-             .filter(Query.a_odds_pct != None)
              .order_by(Query.created_at.desc())
              .all())
 
-    total = len(picks)
+    total      = len(picks)
     ai_correct = sum(1 for p in picks if p.outcome == 'win')
-    vegas_correct = 0
-    for p in picks:
-        # Vegas favorite = whichever side has higher implied %
-        vegas_picked_a = (p.a_odds_pct or 0) >= (p.b_odds_pct or 0)
-        actual_win_a = p.outcome == 'win'
-        if vegas_picked_a == actual_win_a:
-            vegas_correct += 1
-
     ai_rate    = round(ai_correct / total * 100) if total else None
-    vegas_rate = round(vegas_correct / total * 100) if total else None
+
+    # Vegas accuracy only counts picks where we have odds data
+    odds_picks    = [p for p in picks if p.a_odds_pct is not None]
+    vegas_correct = 0
+    for p in odds_picks:
+        vegas_picked_a = (p.a_odds_pct or 0) >= (p.b_odds_pct or 0)
+        if vegas_picked_a == (p.outcome == 'win'):
+            vegas_correct += 1
+    vegas_rate = round(vegas_correct / len(odds_picks) * 100) if odds_picks else None
 
     return render_template('vs_vegas.html',
         picks=picks, total=total,
@@ -682,7 +681,7 @@ def _pil_font(size, bold=True):
             continue
     return ImageFont.load_default()
 
-def generate_share_image(comp1, comp2, sport, a_pct, b_pct, winner, confidence):
+def generate_share_image(comp1, comp2, sport, a_pct, b_pct, winner, confidence, reason=''):
     W, H = 1200, 630
     BG       = (20, 18, 15)
     SURFACE  = (31, 28, 23)
@@ -755,13 +754,33 @@ def generate_share_image(comp1, comp2, sport, a_pct, b_pct, winner, confidence):
     win_text = f"{winner} wins  ·  {confidence} Confidence"
     win_font = _pil_font(30)
     wb = draw.textbbox((0,0), win_text, font=win_font)
-    draw.text((W//2 - (wb[2]-wb[0])//2, 462), win_text, font=win_font, fill=TEXT)
+    draw.text((W//2 - (wb[2]-wb[0])//2, 458), win_text, font=win_font, fill=TEXT)
+
+    # Reason text (wrapped)
+    if reason:
+        reason_font = _pil_font(22, bold=False)
+        max_w = W - 160
+        words = reason.split()
+        lines, line = [], ''
+        for word in words:
+            test = (line + ' ' + word).strip()
+            tb = draw.textbbox((0,0), test, font=reason_font)
+            if tb[2]-tb[0] > max_w and line:
+                lines.append(line); line = word
+            else:
+                line = test
+        if line: lines.append(line)
+        y_r = 504
+        for ln in lines[:2]:
+            lb = draw.textbbox((0,0), ln, font=reason_font)
+            draw.text((W//2 - (lb[2]-lb[0])//2, y_r), ln, font=reason_font, fill=MUTED)
+            y_r += 30
 
     # Bottom URL
     url_font = _pil_font(22, bold=False)
     url_text = "whowins.onrender.com"
     ub = draw.textbbox((0,0), url_text, font=url_font)
-    draw.text((W//2 - (ub[2]-ub[0])//2, 560), url_text, font=url_font, fill=MUTED)
+    draw.text((W//2 - (ub[2]-ub[0])//2, 578), url_text, font=url_font, fill=MUTED)
 
     buf = io.BytesIO()
     img.save(buf, format='PNG', optimize=True)
@@ -781,6 +800,7 @@ def share_image():
         b_pct=int(data.get('b_pct', 50)),
         winner=data.get('winner', ''),
         confidence=data.get('confidence', 'Medium'),
+        reason=data.get('reason', ''),
     )
     return send_file(buf, mimetype='image/png', download_name='whowins-prediction.png')
 
