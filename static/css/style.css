@@ -210,95 +210,119 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   transition: opacity 0.3s;
 }
 
-/* ── Win Probability Card ────────────────────────── */
-.prob-card {
+/* ── Result card ─────────────────────────────────── */
+.result-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 24px;
+  padding: 32px 24px;
   display: flex;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
+  gap: 24px;
   animation: fadeUp 0.4s ease;
 }
 
-.prob-competitor {
+.competitors-row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
+  align-items: center;
+  gap: 16px;
+}
+
+.comp-block {
   flex: 1;
-}
-.prob-right { align-items: flex-end; text-align: right; }
-
-.prob-name {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
-}
-
-.prob-pct {
-  font-size: 2.2rem;
-  font-weight: 900;
-  color: var(--text);
-  line-height: 1;
-  transition: color 0.4s;
-}
-
-.prob-winner .prob-pct  { color: var(--accent); }
-.prob-winner .prob-name { color: var(--accent); }
-
-.prob-bar-wrap {
-  flex: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  text-align: center;
 }
 
-.prob-bar {
-  width: 100%;
-  height: 10px;
+.comp-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.comp-pct {
+  font-size: 3.5rem;
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: -2px;
+}
+
+.comp-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.comp-winner .comp-pct  { color: var(--accent); }
+.comp-winner .comp-name { color: var(--accent); }
+
+.divider-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.divider-line {
+  width: 1px;
+  height: 28px;
   background: var(--border);
+}
+
+.divider-vs {
+  font-size: 0.7rem;
+  font-weight: 900;
+  color: var(--border);
+  letter-spacing: 1px;
+}
+
+.prob-bar-outer {
+  height: 12px;
   border-radius: 50px;
   overflow: hidden;
   display: flex;
+  background: var(--surface2);
 }
 
 .prob-fill-a {
   height: 100%;
   background: linear-gradient(90deg, var(--accent), var(--accent2));
-  border-radius: 50px 0 0 50px;
   width: 50%;
   transition: width 0.9s cubic-bezier(0.4,0,0.2,1);
+  border-radius: 50px 0 0 50px;
 }
 
 .prob-fill-b {
   height: 100%;
-  background: linear-gradient(90deg, #4a4a6a, #5a5a8a);
+  background: var(--border);
   width: 50%;
-  border-radius: 0 50px 50px 0;
   transition: width 0.9s cubic-bezier(0.4,0,0.2,1);
+  border-radius: 0 50px 50px 0;
 }
 
-.prob-winner-badge {
-  font-size: 0.82rem;
+.conf-row {
+  justify-content: center;
+}
+
+.conf-badge-big {
+  font-size: 0.85rem;
   font-weight: 700;
-  padding: 5px 14px;
+  padding: 7px 18px;
   border-radius: 50px;
-  text-align: center;
-  white-space: nowrap;
 }
-.prob-winner-badge.conf-high   { background: rgba(240,180,41,0.15); color: var(--accent); border: 1px solid rgba(240,180,41,0.3); }
-.prob-winner-badge.conf-medium { background: rgba(96,165,250,0.12); color: var(--blue);   border: 1px solid rgba(96,165,250,0.25); }
-.prob-winner-badge.conf-low    { background: rgba(248,113,113,0.1); color: var(--red);    border: 1px solid rgba(248,113,113,0.2); }
+.conf-badge-big.conf-high   { background: rgba(240,180,41,0.12); color: var(--accent); border: 1px solid rgba(240,180,41,0.3); }
+.conf-badge-big.conf-medium { background: rgba(96,165,250,0.1);  color: var(--blue);   border: 1px solid rgba(96,165,250,0.25); }
+.conf-badge-big.conf-low    { background: rgba(248,113,113,0.08);color: var(--red);    border: 1px solid rgba(248,113,113,0.2); }
 
-/* ── Sections Grid ───────────────────────────────── */
+/* ── Sections Grid (unused, kept for journal) ────── */
 .sections-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -617,11 +641,9 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 
 /* ── Mobile ──────────────────────────────────────── */
 @media (max-width: 600px) {
-  .vs-row     { flex-direction: column; align-items: stretch; }
-  .vs-badge   { margin: 0 auto; }
-  .prob-card  { flex-direction: column; text-align: center; }
-  .prob-competitor { align-items: center; }
-  .prob-right { align-items: center; }
-  .sections-grid { grid-template-columns: 1fr; }
-  .journal-stats { flex-direction: column; }
+  .vs-row          { flex-direction: column; align-items: stretch; }
+  .vs-badge        { margin: 0 auto; }
+  .comp-pct        { font-size: 2.6rem; }
+  .journal-stats   { flex-direction: column; }
+  .sections-grid   { grid-template-columns: 1fr; }
 }

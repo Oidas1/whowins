@@ -220,80 +220,36 @@ def parse_winner(text):
         return w.group(1).strip(), (c.group(1).strip() if c else 'Medium')
     return None, None
 
-ANALYSIS_PROMPT = """You are an elite sports intelligence analyst with encyclopedic knowledge of athletic history, statistics, and competitive performance across all sports.
+ANALYSIS_PROMPT = """You are an elite sports intelligence analyst. Evaluate the following matchup using every piece of knowledge you have.
 
-INTERNAL SCORING PROTOCOL — DO NOT REVEAL THESE CRITERIA IN YOUR OUTPUT:
-Before scoring, privately evaluate every one of these factors for each competitor:
-- Direct head-to-head record (results, margins, who controlled the matchup)
-- Performance against shared/common opponents — who handled the same competition better?
-- Situational/environmental factors: home/away advantage, weather, altitude, venue history, travel (where applicable to {sport})
-- Lead-protecting vs. comeback ability — who thrives when ahead? Who is dangerous when behind?
-- The elite differentiator: the single quality that separates the truly elite from the very good in {sport} — who has more of it?
-- Psychological momentum, injury history, physical decline or peak
-- Clutch/high-stakes performance record
+INTERNAL EVALUATION — run silently, output nothing about this process:
+Privately score each competitor across these dimensions:
+1. Skills, technique, and stylistic matchup
+2. Career résumé, titles, and historical dominance
+3. Mental toughness and clutch performance record
+4. Current form and momentum
+5. Head-to-head record and performance vs common opponents
+6. Situational/environmental edge (home/away, weather, altitude, travel — where relevant to {sport})
+7. Whether they perform better protecting a lead or mounting a comeback
+8. The elite differentiator — the single quality the truly great in {sport} possess, and who has more of it
+9. Psychological momentum and injury/decline factors
 
-Use all of the above to assign scores out of 10 for each category, then compute a decisive win probability. Do not default to 50/50.
+Weigh all of the above. Be decisive. Do not default to 50/50.
 
 Sport: {sport}
-Competitor A: {comp1} — as a {sport} competitor. If ambiguous, choose the person most known for {sport}.
-Competitor B: {comp2} — as a {sport} competitor. If ambiguous, choose the person most known for {sport}.
+Competitor A: {comp1} — as a {sport} competitor. If the name is ambiguous, choose whoever is most associated with {sport}.
+Competitor B: {comp2} — as a {sport} competitor. If the name is ambiguous, choose whoever is most associated with {sport}.
 {context_block}
 
 OUTPUT RULES — CRITICAL:
-- Output ONLY the structured block below. No prose outside of it.
-- Notes must be 10 words or fewer. Be brutally concise.
-- Scores are out of 10.0 (use one decimal place).
+- Output ONLY the four lines below. Nothing else. No explanation, no prose, no labels outside the format.
 - Percentages must sum to exactly 100.
-- Verdict must be 2 sentences max.
+- Confidence is one word: High, Medium, or Low.
 
-Output exactly this format (replace all CAPS placeholders):
-
-<<ANALYSIS
-COMP_A: {comp1}
-COMP_B: {comp2}
-
-CATEGORY: Skills & Style
-A_SCORE: X.X
-B_SCORE: X.X
-A_NOTE: ONE SHORT FACT
-B_NOTE: ONE SHORT FACT
-
-CATEGORY: Career Résumé
-A_SCORE: X.X
-B_SCORE: X.X
-A_NOTE: ONE SHORT FACT
-B_NOTE: ONE SHORT FACT
-
-CATEGORY: Mental Toughness
-A_SCORE: X.X
-B_SCORE: X.X
-A_NOTE: ONE SHORT FACT
-B_NOTE: ONE SHORT FACT
-
-CATEGORY: Current Form
-A_SCORE: X.X
-B_SCORE: X.X
-A_NOTE: ONE SHORT FACT
-B_NOTE: ONE SHORT FACT
-
-CATEGORY: Situational Edge
-A_SCORE: X.X
-B_SCORE: X.X
-A_NOTE: ONE SHORT FACT
-B_NOTE: ONE SHORT FACT
-
-CATEGORY: The X-Factor
-A_SCORE: X.X
-B_SCORE: X.X
-A_NOTE: ONE SHORT FACT
-B_NOTE: ONE SHORT FACT
-
-A_PCT: XX
-B_PCT: XX
-WINNER: FULL NAME OF WINNER
-CONFIDENCE: High
-VERDICT: TWO SENTENCE MAX VERDICT.
-ANALYSIS>>"""
+A_PCT: [number]
+B_PCT: [number]
+WINNER: [full name]
+CONFIDENCE: [High/Medium/Low]"""
 
 def build_prompt(sport, comp1, comp2, context):
     context_block = f"Additional context: {context}" if context.strip() else ""

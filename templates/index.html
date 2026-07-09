@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WhoWins — Sports Matchup Analyzer</title>
-  <meta name="description" content="AI-powered sports matchup analysis. Skills, accolades, mindset, and a straight pick.">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -18,42 +17,37 @@
 </header>
 
 <main>
-  <!-- ── Input form ── -->
+
+  <!-- Form -->
   <div id="formSection">
-    <p class="tagline">AI-powered matchup analysis for every sport</p>
+    <p class="tagline">Enter any sport and two competitors</p>
     <form id="matchupForm">
       <div class="form-card">
         <div class="field">
           <label>Sport</label>
           <input type="text" id="sport" placeholder="e.g. Boxing, NBA, NFL, Tennis, MMA…" required>
         </div>
-
         <div class="vs-row">
           <div class="field">
             <label>Competitor / Team A</label>
-            <input type="text" id="comp1" placeholder="e.g. Canelo Álvarez" required>
+            <input type="text" id="comp1" placeholder="Name" required>
           </div>
           <div class="vs-badge">VS</div>
           <div class="field">
             <label>Competitor / Team B</label>
-            <input type="text" id="comp2" placeholder="e.g. Terence Crawford" required>
+            <input type="text" id="comp2" placeholder="Name" required>
           </div>
         </div>
-
         <div class="field">
           <label>Extra context <span class="optional">(optional)</span></label>
-          <textarea id="context" rows="2" placeholder="Injury news, venue, specific date, recent form…"></textarea>
+          <textarea id="context" rows="2" placeholder="Injuries, venue, date…"></textarea>
         </div>
-
-        <button type="submit" id="analyzeBtn">
-          <span id="btnText">Analyze Matchup</span>
-          <span id="btnLoader" style="display:none">Analyzing…</span>
-        </button>
+        <button type="submit" id="analyzeBtn">Get Prediction</button>
       </div>
     </form>
   </div>
 
-  <!-- ── Loading state ── -->
+  <!-- Loading -->
   <div id="loadingSection" style="display:none">
     <div class="loading-card">
       <div class="loading-vs">
@@ -64,49 +58,53 @@
       <div class="loading-dots">
         <span></span><span></span><span></span><span></span><span></span>
       </div>
-      <p class="loading-msg" id="loadingMsg">Pulling every stat, record, and detail we can find…</p>
+      <p class="loading-msg" id="loadingMsg">Analyzing…</p>
     </div>
   </div>
 
-  <!-- ── Result ── -->
+  <!-- Result -->
   <div id="resultSection" style="display:none">
 
-    <!-- Win probability header -->
-    <div class="prob-card">
-      <div class="prob-competitor" id="probA">
-        <div class="prob-name" id="probNameA"></div>
-        <div class="prob-pct" id="probPctA">—</div>
-      </div>
-      <div class="prob-bar-wrap">
-        <div class="prob-bar">
-          <div class="prob-fill-a" id="probFillA"></div>
-          <div class="prob-fill-b" id="probFillB"></div>
+    <!-- Big probability display -->
+    <div class="result-card">
+      <div class="competitors-row">
+        <div class="comp-block" id="compBlockA">
+          <div class="comp-name" id="compNameA"></div>
+          <div class="comp-pct" id="compPctA">—</div>
+          <div class="comp-label">Win Probability</div>
         </div>
-        <div class="prob-winner-badge" id="probWinnerBadge" style="display:none"></div>
+        <div class="divider-col">
+          <div class="divider-line"></div>
+          <div class="divider-vs">VS</div>
+          <div class="divider-line"></div>
+        </div>
+        <div class="comp-block" id="compBlockB">
+          <div class="comp-name" id="compNameB"></div>
+          <div class="comp-pct" id="compPctB">—</div>
+          <div class="comp-label">Win Probability</div>
+        </div>
       </div>
-      <div class="prob-competitor prob-right" id="probB">
-        <div class="prob-name" id="probNameB"></div>
-        <div class="prob-pct" id="probPctB">—</div>
+
+      <!-- Probability bar -->
+      <div class="prob-bar-outer">
+        <div class="prob-fill-a" id="probFillA"></div>
+        <div class="prob-fill-b" id="probFillB"></div>
+      </div>
+
+      <!-- Confidence badge -->
+      <div class="conf-row" id="confRow" style="display:none">
+        <span class="conf-badge-big" id="confBadge"></span>
       </div>
     </div>
 
-    <!-- Category score cards -->
-    <div class="sections-grid" id="sectionsGrid"></div>
-
-    <!-- Verdict -->
-    <div class="verdict-card" id="verdictCard" style="display:none">
-      <div class="verdict-label">⚖️ The Verdict</div>
-      <p class="verdict-text" id="verdictText"></p>
-    </div>
-
-    <!-- Actions -->
     <div class="result-actions">
-      <button class="btn-action" onclick="copyResult()">📋 Copy Analysis</button>
       <button class="btn-action btn-new-search" onclick="newSearch()">🔄 New Search</button>
+      <button class="btn-action" onclick="copyResult()">📋 Copy</button>
       <span class="copied-msg" id="copiedMsg">Copied!</span>
     </div>
 
   </div>
+
 </main>
 
 <script src="/static/js/app.js"></script>
