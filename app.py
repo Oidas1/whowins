@@ -1,11 +1,16 @@
 import os
 import traceback
-from flask import Flask, render_template, request, Response, stream_with_context
+from flask import Flask, render_template, request, Response, stream_with_context, session, redirect, url_for
 import anthropic
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'change-me-in-production')
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+SITE_PASSWORD = os.environ.get('SITE_PASSWORD', 'whowins123')
+
+def is_authed():
+    return session.get('authed') is True
 
 ANALYSIS_PROMPT = """You are a sharp, straight-talking sports analyst. You've studied this sport deeply and you don't hedge — you give a real opinion backed by evidence.
 
@@ -49,8 +54,25 @@ def build_prompt(sport, comp1, comp2, context):
     )
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        if request.form.get('password') == SITE_PASSWORD:
+            session['authed'] = True
+            return redirect(url_for('index'))
+        error = 'Wrong password. Try again.'
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
 @app.route('/')
 def index():
+    if not is_authed():
+        return redirect(url_for('login'))
     return render_template('index.html')
 
 
@@ -60,6 +82,9 @@ def analyze():
     comp1   = request.form.get('comp1', '').strip()
     comp2   = request.form.get('comp2', '').strip()
     context = request.form.get('context', '').strip()
+
+    if not is_authed():
+        return Response("Unauthorized.", status=401)
 
     if not all([sport, comp1, comp2]):
         return Response("Missing fields.", status=400)

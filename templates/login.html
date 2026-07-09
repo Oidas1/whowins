@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Enter Password</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <div class="logo">🏆 WhoWins</div>
+  <p class="tagline">AI-powered matchup analysis for every sport</p>
+</header>
+
+<main>
+  <div class="login-card">
+    <h2 class="login-title">Enter Password</h2>
+    {% if error %}
+    <p class="login-error">{{ error }}</p>
+    {% endif %}
+    <form method="POST" action="/login" class="login-form">
+      <input type="password" name="password" placeholder="Password" autofocus required class="login-input">
+      <button type="submit" class="login-btn">Enter →</button>
+    </form>
+  </div>
+</main>
+</body>
+</html>
