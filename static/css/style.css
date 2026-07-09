@@ -593,6 +593,62 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   border-top: 1px solid var(--border); padding-top: 12px;
 }
 
+.stat-win  .stat-num { color: var(--green); }
+.stat-loss .stat-num { color: var(--red); }
+
+.card-win  { border-color: rgba(74,222,128,0.3); }
+.card-loss { border-color: rgba(248,113,113,0.3); }
+
+.outcome-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.outcome-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.btn-outcome {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 50px;
+  border: 1px solid;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.15s;
+}
+.btn-win  { color: var(--green); border-color: rgba(74,222,128,0.4); }
+.btn-win:hover  { background: rgba(74,222,128,0.1); }
+.btn-loss { color: var(--red);   border-color: rgba(248,113,113,0.4); }
+.btn-loss:hover { background: rgba(248,113,113,0.1); }
+
+.outcome-badge {
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 50px;
+}
+.outcome-win  { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+.outcome-loss { background: rgba(248,113,113,0.1); color: var(--red);   border: 1px solid rgba(248,113,113,0.25); }
+
+.btn-undo {
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.btn-undo:hover { color: var(--text); border-color: var(--muted); }
+
 .empty-journal {
   text-align: center; padding: 60px 20px;
   display: flex; flex-direction: column; align-items: center; gap: 16px;

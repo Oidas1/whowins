@@ -43,6 +43,7 @@ class Query(db.Model):
     winner       = db.Column(db.String(100))
     confidence   = db.Column(db.String(20))
     analysis     = db.Column(db.Text)
+    outcome      = db.Column(db.String(10), default='pending')  # pending / win / loss
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
@@ -162,6 +163,20 @@ def journal_save():
     db.session.add(entry)
     db.session.commit()
     return jsonify({'ok': True})
+
+@app.route('/journal/outcome/<int:entry_id>', methods=['POST'])
+def journal_outcome(entry_id):
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    entry = Query.query.get_or_404(entry_id)
+    if entry.user_uid != get_user_uid():
+        return jsonify({'error': 'Forbidden'}), 403
+    outcome = request.form.get('outcome', 'pending')
+    if outcome not in ('win', 'loss', 'pending'):
+        return jsonify({'error': 'Invalid'}), 400
+    entry.outcome = outcome
+    db.session.commit()
+    return redirect(url_for('journal'))
 
 @app.route('/journal/delete/<int:entry_id>', methods=['POST'])
 def journal_delete(entry_id):

@@ -19,28 +19,39 @@
   <div class="journal-wrap">
 
     {% if entries %}
+
+    {% set wins   = entries|selectattr('outcome','equalto','win') |list|length %}
+    {% set losses = entries|selectattr('outcome','equalto','loss')|list|length %}
+    {% set total  = entries|length %}
+    {% set settled = wins + losses %}
+
     <div class="journal-stats">
       <div class="stat-box">
-        <span class="stat-num">{{ entries|length }}</span>
-        <span class="stat-label">Total Lookups</span>
+        <span class="stat-num">{{ total }}</span>
+        <span class="stat-label">Total</span>
+      </div>
+      <div class="stat-box stat-win">
+        <span class="stat-num">{{ wins }}</span>
+        <span class="stat-label">Wins ✓</span>
+      </div>
+      <div class="stat-box stat-loss">
+        <span class="stat-num">{{ losses }}</span>
+        <span class="stat-label">Losses ✗</span>
       </div>
       <div class="stat-box">
-        <span class="stat-num">{{ entries|selectattr('confidence', 'equalto', 'High')|list|length }}</span>
-        <span class="stat-label">High Confidence</span>
-      </div>
-      <div class="stat-box">
-        <span class="stat-num">{{ entries|map(attribute='sport')|unique|list|length }}</span>
-        <span class="stat-label">Sports Covered</span>
+        <span class="stat-num">{% if settled > 0 %}{{ ((wins / settled) * 100)|round|int }}%{% else %}—{% endif %}</span>
+        <span class="stat-label">Hit Rate</span>
       </div>
     </div>
 
     <div class="journal-list">
       {% for e in entries %}
-      <div class="journal-card">
+      <div class="journal-card {% if e.outcome == 'win' %}card-win{% elif e.outcome == 'loss' %}card-loss{% endif %}">
+
         <div class="journal-card-top">
           <div class="journal-meta">
             <span class="sport-tag">{{ e.sport }}</span>
-            <span class="journal-date">{{ e.created_at.strftime('%b %d, %Y · %I:%M %p') }}</span>
+            <span class="journal-date">{{ e.created_at.strftime('%b %d, %Y') }}</span>
           </div>
           <form method="POST" action="/journal/delete/{{ e.id }}" onsubmit="return confirm('Delete this entry?')">
             <button type="submit" class="btn-delete">✕</button>
@@ -48,13 +59,9 @@
         </div>
 
         <div class="matchup-row">
-          <span class="competitor {% if e.winner and e.competitor_a and e.winner.lower() in e.competitor_a.lower() %}winner{% endif %}">
-            {{ e.competitor_a }}
-          </span>
+          <span class="competitor {% if e.winner and e.competitor_a and e.winner.lower() in e.competitor_a.lower() %}winner{% endif %}">{{ e.competitor_a }}</span>
           <span class="vs-text">vs</span>
-          <span class="competitor {% if e.winner and e.competitor_b and e.winner.lower() in e.competitor_b.lower() %}winner{% endif %}">
-            {{ e.competitor_b }}
-          </span>
+          <span class="competitor {% if e.winner and e.competitor_b and e.winner.lower() in e.competitor_b.lower() %}winner{% endif %}">{{ e.competitor_b }}</span>
         </div>
 
         {% if e.winner %}
@@ -67,12 +74,33 @@
         </div>
         {% endif %}
 
-        {% if e.analysis %}
-        <details class="analysis-details">
-          <summary>View full analysis</summary>
-          <div class="analysis-body">{{ e.analysis }}</div>
-        </details>
-        {% endif %}
+        <!-- Outcome buttons -->
+        <div class="outcome-row">
+          {% if e.outcome == 'pending' %}
+            <span class="outcome-label">Mark result:</span>
+            <form method="POST" action="/journal/outcome/{{ e.id }}" style="display:inline">
+              <input type="hidden" name="outcome" value="win">
+              <button type="submit" class="btn-outcome btn-win">✓ Won</button>
+            </form>
+            <form method="POST" action="/journal/outcome/{{ e.id }}" style="display:inline">
+              <input type="hidden" name="outcome" value="loss">
+              <button type="submit" class="btn-outcome btn-loss">✗ Lost</button>
+            </form>
+          {% elif e.outcome == 'win' %}
+            <span class="outcome-badge outcome-win">✓ Won</span>
+            <form method="POST" action="/journal/outcome/{{ e.id }}" style="display:inline">
+              <input type="hidden" name="outcome" value="pending">
+              <button type="submit" class="btn-undo">Undo</button>
+            </form>
+          {% elif e.outcome == 'loss' %}
+            <span class="outcome-badge outcome-loss">✗ Lost</span>
+            <form method="POST" action="/journal/outcome/{{ e.id }}" style="display:inline">
+              <input type="hidden" name="outcome" value="pending">
+              <button type="submit" class="btn-undo">Undo</button>
+            </form>
+          {% endif %}
+        </div>
+
       </div>
       {% endfor %}
     </div>
