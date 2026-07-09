@@ -44,7 +44,10 @@ class Query(db.Model):
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"Warning: could not create tables on startup: {e}")
 
 # ── Password helpers ──────────────────────────────────────────────────────────
 
