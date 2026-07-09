@@ -12,9 +12,11 @@ ANALYSIS_PROMPT = """You are a sharp, straight-talking sports analyst. You've st
 Analyze this matchup:
 
 Sport: {sport}
-Competitor A: {comp1}
-Competitor B: {comp2}
+Competitor A: {comp1} — specifically as a {sport} competitor, not any other athlete who may share a similar name
+Competitor B: {comp2} — specifically as a {sport} competitor, not any other athlete who may share a similar name
 {context_block}
+
+IMPORTANT: Base your entire analysis on these two people strictly within the context of {sport}. If a name could refer to multiple people, always choose the one most relevant to {sport}.
 
 Give a full breakdown in this exact structure:
 
