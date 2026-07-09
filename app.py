@@ -9,6 +9,7 @@ from flask import Flask, render_template, request, Response, stream_with_context
 from flask_sqlalchemy import SQLAlchemy
 import anthropic
 import urllib.request
+import urllib.parse
 import json
 
 app = Flask(__name__)
@@ -23,6 +24,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+TAVILY_API_KEY    = os.environ.get('TAVILY_API_KEY', '')
 ADMIN_KEY         = os.environ.get('ADMIN_KEY', 'adminkey123')
 RENDER_API_KEY    = os.environ.get('RENDER_API_KEY', '')
 RENDER_SERVICE_ID = os.environ.get('RENDER_SERVICE_ID', '')
@@ -66,6 +68,7 @@ def _sync_to_render(new_pw):
     try:
         payload = json.dumps([
             {"key": "ANTHROPIC_API_KEY",  "value": os.environ.get('ANTHROPIC_API_KEY', '')},
+            {"key": "TAVILY_API_KEY",     "value": os.environ.get('TAVILY_API_KEY', '')},
             {"key": "PYTHON_VERSION",     "value": "3.11.6"},
             {"key": "SECRET_KEY",         "value": os.environ.get('SECRET_KEY', '')},
             {"key": "SITE_PASSWORD",      "value": new_pw},
@@ -237,9 +240,9 @@ Privately score each competitor across these dimensions:
 Weigh all of the above. Be decisive. Do not default to 50/50.
 
 Sport: {sport}
-Competitor A: {comp1} — as a {sport} competitor. If the name is ambiguous, choose whoever is most associated with {sport}.
-Competitor B: {comp2} — as a {sport} competitor. If the name is ambiguous, choose whoever is most associated with {sport}.
-{context_block}
+Competitor A: {comp1} — evaluate strictly as a {sport} competitor. The live research below is authoritative — use it to identify who this person is in {sport}, even if you associate the name with another sport.
+Competitor B: {comp2} — evaluate strictly as a {sport} competitor. The live research below is authoritative — use it to identify who this person is in {sport}, even if you associate the name with another sport.
+{search_block}{context_block}
 
 OUTPUT RULES — CRITICAL:
 - Output ONLY the five lines below. Nothing else. No explanation, no prose outside the format.
@@ -253,10 +256,57 @@ WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
 REASON: [2 sentence explanation]"""
 
+def web_search(query):
+    """Search Tavily for real-world info. Returns a short text snippet or empty string."""
+    if not TAVILY_API_KEY:
+        return ''
+    try:
+        payload = json.dumps({
+            "api_key": TAVILY_API_KEY,
+            "query": query,
+            "search_depth": "basic",
+            "max_results": 3,
+            "include_answer": True,
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.tavily.com/search",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        res = urllib.request.urlopen(req, timeout=8)
+        data = json.loads(res.read())
+        parts = []
+        if data.get('answer'):
+            parts.append(data['answer'])
+        for r in data.get('results', [])[:3]:
+            if r.get('content'):
+                parts.append(r['content'][:300])
+        return '\n'.join(parts)
+    except Exception:
+        return ''
+
 def build_prompt(sport, comp1, comp2, context):
-    context_block = f"Additional context: {context}" if context.strip() else ""
+    # Live search for each competitor to ground Claude in real facts
+    search1 = web_search(f"{comp1} {sport} player career stats")
+    search2 = web_search(f"{comp2} {sport} player career stats")
+
+    search_block = ''
+    if search1 or search2:
+        search_block = '\nLIVE RESEARCH (use this to identify and evaluate each competitor accurately):\n'
+        if search1:
+            search_block += f'\n[{comp1} — {sport}]\n{search1}\n'
+        if search2:
+            search_block += f'\n[{comp2} — {sport}]\n{search2}\n'
+
+    context_block = ''
+    if context.strip():
+        context_block = f'\nAdditional context: {context}'
+
     return ANALYSIS_PROMPT.format(
-        sport=sport, comp1=comp1, comp2=comp2, context_block=context_block
+        sport=sport, comp1=comp1, comp2=comp2,
+        search_block=search_block,
+        context_block=context_block
     )
 
 if __name__ == '__main__':
