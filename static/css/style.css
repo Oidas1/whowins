@@ -207,6 +207,163 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   letter-spacing: 0.5px;
 }
 
+/* ── Header nav ──────────────────────────────── */
+.site-header, header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.logo { text-decoration: none; }
+.header-nav { display: flex; gap: 16px; align-items: center; }
+.nav-link { color: var(--muted); text-decoration: none; font-size: 0.88rem; transition: color 0.2s; }
+.nav-link:hover, .nav-link.active { color: var(--accent); }
+
+/* ── Journal ─────────────────────────────────── */
+.journal-wrap { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+.journal-stats {
+  display: flex;
+  gap: 12px;
+}
+.stat-box {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-num { font-size: 1.8rem; font-weight: 900; color: var(--accent); }
+.stat-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+
+.journal-list { display: flex; flex-direction: column; gap: 12px; }
+
+.journal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.journal-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.journal-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.sport-tag {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.journal-date { font-size: 0.78rem; color: var(--muted); }
+
+.btn-delete {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.2s, color 0.2s;
+}
+.btn-delete:hover { border-color: #f87171; color: #f87171; }
+
+.matchup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  flex-wrap: wrap;
+}
+.competitor { color: var(--muted); }
+.competitor.winner { color: var(--green); }
+.vs-text { color: var(--border); font-size: 0.8rem; font-weight: 400; }
+
+.pick-row { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; }
+.pick-label { color: var(--muted); }
+.pick-name { font-weight: 700; color: var(--text); }
+
+.conf-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 50px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.conf-high   { background: rgba(74,222,128,0.15); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+.conf-medium { background: rgba(245,196,24,0.12); color: var(--accent); border: 1px solid rgba(245,196,24,0.3); }
+.conf-low    { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.25); }
+
+.analysis-details { margin-top: 4px; }
+.analysis-details summary {
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.analysis-details summary::-webkit-details-marker { display: none; }
+.analysis-details summary::before { content: '▸'; transition: transform 0.2s; }
+.analysis-details[open] summary::before { transform: rotate(90deg); }
+.analysis-body {
+  margin-top: 12px;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--muted);
+  white-space: pre-wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.empty-journal {
+  text-align: center;
+  padding: 60px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+.btn-new {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.btn-new:hover { background: var(--accent2); }
+
 /* ── Login ───────────────────────────────────── */
 .login-card {
   max-width: 380px;

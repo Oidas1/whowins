@@ -55,6 +55,7 @@ form.addEventListener('submit', async (e) => {
     }
 
     extractWinner(fullText);
+    saveToJournal(sport, comp1, comp2, fullText);
 
   } catch (err) {
     resultDiv.textContent = 'Something went wrong. Try again.';
@@ -88,6 +89,17 @@ function extractWinner(text) {
     winnerBar.textContent = `${emoji}  WINNER: ${match[1].toUpperCase()}  —  Confidence: ${match[2]}`;
     winnerBar.style.display = 'block';
   }
+}
+
+async function saveToJournal(sport, comp1, comp2, analysis) {
+  if (!analysis || analysis.startsWith('ERROR')) return;
+  try {
+    await fetch('/journal/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sport, comp1, comp2, analysis }),
+    });
+  } catch (_) {}
 }
 
 function copyResult() {

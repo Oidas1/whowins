@@ -1,3 +1,5 @@
 flask
+flask-sqlalchemy
 anthropic
 gunicorn
+psycopg2-binary

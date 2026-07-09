@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — My Journal</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/journal" class="nav-link active">Journal</a>
+    <a href="/logout" class="nav-link">Logout</a>
+  </nav>
+</header>
+
+<main>
+  <div class="journal-wrap">
+
+    {% if entries %}
+    <div class="journal-stats">
+      <div class="stat-box">
+        <span class="stat-num">{{ entries|length }}</span>
+        <span class="stat-label">Total Lookups</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-num">{{ entries|selectattr('confidence', 'equalto', 'High')|list|length }}</span>
+        <span class="stat-label">High Confidence</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-num">{{ entries|map(attribute='sport')|unique|list|length }}</span>
+        <span class="stat-label">Sports Covered</span>
+      </div>
+    </div>
+
+    <div class="journal-list">
+      {% for e in entries %}
+      <div class="journal-card">
+        <div class="journal-card-top">
+          <div class="journal-meta">
+            <span class="sport-tag">{{ e.sport }}</span>
+            <span class="journal-date">{{ e.created_at.strftime('%b %d, %Y · %I:%M %p') }}</span>
+          </div>
+          <form method="POST" action="/journal/delete/{{ e.id }}" onsubmit="return confirm('Delete this entry?')">
+            <button type="submit" class="btn-delete">✕</button>
+          </form>
+        </div>
+
+        <div class="matchup-row">
+          <span class="competitor {% if e.winner and e.competitor_a and e.winner.lower() in e.competitor_a.lower() %}winner{% endif %}">
+            {{ e.competitor_a }}
+          </span>
+          <span class="vs-text">vs</span>
+          <span class="competitor {% if e.winner and e.competitor_b and e.winner.lower() in e.competitor_b.lower() %}winner{% endif %}">
+            {{ e.competitor_b }}
+          </span>
+        </div>
+
+        {% if e.winner %}
+        <div class="pick-row">
+          <span class="pick-label">Pick:</span>
+          <span class="pick-name">{{ e.winner }}</span>
+          {% if e.confidence %}
+          <span class="conf-badge conf-{{ e.confidence|lower }}">{{ e.confidence }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if e.analysis %}
+        <details class="analysis-details">
+          <summary>View full analysis</summary>
+          <div class="analysis-body">{{ e.analysis }}</div>
+        </details>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="empty-journal">
+      <p>📋 No lookups yet.</p>
+      <a href="/" class="btn-new">Run your first analysis →</a>
+    </div>
+    {% endif %}
+
+  </div>
+</main>
+</body>
+</html>
