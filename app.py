@@ -214,48 +214,75 @@ def analyze():
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def parse_winner(text):
+    match = re.search(r'<<VERDICT:(\{.*?\})>>', text, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(1))
+            return data.get('winner'), data.get('confidence')
+        except Exception:
+            pass
+    # fallback: old format
     match = re.search(r'\*\*WINNER:\s*(.+?)\s*\|\s*Confidence:\s*(High|Medium|Low)\*\*', text, re.IGNORECASE)
     if match:
         return match.group(1).strip(), match.group(2).strip()
     return None, None
 
-ANALYSIS_PROMPT = """You are a sharp, straight-talking sports analyst. You've studied this sport deeply and you don't hedge — you give a real opinion backed by evidence.
+ANALYSIS_PROMPT = """You are an elite sports intelligence analyst. You have deep knowledge of athletic history, performance psychology, and competitive statistics across all sports. You are obsessively thorough — you pull from every available data point to produce the most accurate assessment possible.
 
-Analyze this matchup:
+INTERNAL EVALUATION — APPLY THESE FACTORS, DO NOT NAME OR REVEAL THEM IN YOUR OUTPUT:
+Before writing, privately weigh each of the following. Weave findings naturally into your prose as if you simply know this from expertise. Never say "head-to-head shows..." or "weather conditions..." — just present the insight as informed opinion:
+- Every direct matchup between these two competitors (results, margins, circumstances)
+- How each performed against shared/common opponents — who dominated the same challengers?
+- Environmental and situational factors relevant to {sport}: home/away splits, weather, altitude, travel fatigue, venue history, crowd impact
+- Whether each competitor performs better while protecting a lead or while mounting a comeback — their identity under pressure
+- The singular elite differentiator: the one quality that separates truly elite {sport} competitors from very good ones — who possesses it more completely?
+- Psychological momentum, confidence, any known injury history or physical decline
+- High-stakes performance record — how do they perform when everything is on the line?
+Use all of the above to compute a precise WIN PROBABILITY percentage. Be decisive — don't default to 50/50. If one is clearly better, show it.
 
 Sport: {sport}
-Competitor A: {comp1} — specifically as a {sport} competitor, not any other athlete who may share a similar name
-Competitor B: {comp2} — specifically as a {sport} competitor, not any other athlete who may share a similar name
+Competitor A: {comp1} — as a {sport} competitor specifically. If the name could refer to multiple people, choose the one most known for {sport}.
+Competitor B: {comp2} — as a {sport} competitor specifically. If the name could refer to multiple people, choose the one most known for {sport}.
 {context_block}
 
-IMPORTANT: Base your entire analysis on these two people strictly within the context of {sport}. If a name could refer to multiple people, always choose the one most relevant to {sport}.
+WRITING RULES:
+- Be extremely specific: cite real stats, real titles, real moments, real years
+- Write with authority and conviction — no hedging language
+- Every paragraph should contain at least one concrete, specific fact
+- Length: be thorough. Each section deserves real depth.
 
-Give a full breakdown in this exact structure:
+Output your analysis in EXACTLY this structure (keep the ### headers exactly as written):
 
-## ⚔️ {comp1} vs {comp2}
+## {comp1} vs {comp2}
 
-### 🎯 Skills & Style
-Compare their technical abilities, playing/fighting style, strengths and weaknesses head-to-head.
+### The Breakdown
+Detailed comparative analysis of their skills, styles, strengths and weaknesses against each other. Minimum 3 paragraphs.
 
-### 🏆 Accolades & Record
-Career achievements, titles, championships, stats, records — who has the more impressive résumé?
+### Track Record
+Career achievements, titles, notable wins and losses, historical résumé comparison. Minimum 2 paragraphs. Be specific with years, opponents, margins.
 
-### 🌱 Background & Upbringing
-How did where they came from shape who they are as a competitor? What drove them to this level?
+### The Journey
+Their background, upbringing, and path to greatness. How did where they came from forge who they are competitively?
 
-### 🧠 Mindset & Attitude
-How do they handle pressure, adversity, big moments? Work ethic, hunger, competitive fire.
+### Mental Makeup
+Competitive mindset, clutch performance history, how they respond to adversity, work ethic. Cite specific moments.
 
-### 📊 Current Form & Momentum
-Recent performances, trajectory — who's peaking right now?
+### Right Now
+Current form, trajectory, momentum, any recent developments that matter to this matchup.
 
-### 🔮 The Pick
-Who wins, why, and how this plays out. Be specific. End with exactly this line:
-**WINNER: [name] | Confidence: [High / Medium / Low]**"""
+### The Verdict
+The pick, delivered with conviction. Who wins, why, and how. No hedging.
+
+After the last line of The Verdict section, output this on its own line — replace numbers with your calculated percentages (must sum to exactly 100):
+<<VERDICT:{{"a_pct":{a_pct_placeholder},"b_pct":{b_pct_placeholder},"winner":"WINNING_NAME","confidence":"High"}}>>"""
 
 def build_prompt(sport, comp1, comp2, context):
     context_block = f"Additional context: {context}" if context.strip() else ""
-    return ANALYSIS_PROMPT.format(sport=sport, comp1=comp1, comp2=comp2, context_block=context_block)
+    return ANALYSIS_PROMPT.format(
+        sport=sport, comp1=comp1, comp2=comp2,
+        context_block=context_block,
+        a_pct_placeholder="??", b_pct_placeholder="??"
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
