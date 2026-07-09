@@ -19,6 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'change-me-in-production')
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=60)
 
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///whowins.db')
 if db_url.startswith('postgres://'):
@@ -153,6 +154,7 @@ def login():
     error = None
     if request.method == 'POST':
         if request.form.get('password') == get_password():
+            session.permanent = True
             session['authed'] = True
             get_user_uid()
             rotate_password()
