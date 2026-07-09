@@ -312,6 +312,17 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   justify-content: center;
 }
 
+.reason-text {
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--muted);
+  text-align: center;
+  padding: 14px 16px;
+  background: var(--surface2);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
 .conf-badge-big {
   font-size: 0.85rem;
   font-weight: 700;

@@ -73,6 +73,7 @@ function parse(text) {
     bPct:       parseInt(get('B_PCT'))  || 50,
     winner:     get('WINNER'),
     confidence: get('CONFIDENCE') || 'Medium',
+    reason:     get('REASON') || '',
   };
 }
 
@@ -111,6 +112,14 @@ function render(d) {
   badge.textContent = `${emoji} ${conf} Confidence`;
   badge.className   = 'conf-badge-big conf-' + conf.toLowerCase();
   document.getElementById('confRow').style.display = 'flex';
+
+  const reasonEl = document.getElementById('reasonText');
+  if (d.reason) {
+    reasonEl.textContent = d.reason;
+    reasonEl.style.display = 'block';
+  } else {
+    reasonEl.style.display = 'none';
+  }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }

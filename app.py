@@ -242,14 +242,16 @@ Competitor B: {comp2} — as a {sport} competitor. If the name is ambiguous, cho
 {context_block}
 
 OUTPUT RULES — CRITICAL:
-- Output ONLY the four lines below. Nothing else. No explanation, no prose, no labels outside the format.
+- Output ONLY the five lines below. Nothing else. No explanation, no prose outside the format.
 - Percentages must sum to exactly 100.
 - Confidence is one word: High, Medium, or Low.
+- REASON: 2 sentences max. State the 1-2 biggest deciding factors only. Be direct and specific.
 
 A_PCT: [number]
 B_PCT: [number]
 WINNER: [full name]
-CONFIDENCE: [High/Medium/Low]"""
+CONFIDENCE: [High/Medium/Low]
+REASON: [2 sentence explanation]"""
 
 def build_prompt(sport, comp1, comp2, context):
     context_block = f"Additional context: {context}" if context.strip() else ""
