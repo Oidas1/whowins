@@ -468,6 +468,8 @@ def fetch_odds(sport, comp1, comp2):
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         res = urllib.request.urlopen(req, timeout=8)
         events = json.loads(res.read())
+        if not isinstance(events, list):
+            return None
     except Exception:
         return None
 
@@ -503,13 +505,18 @@ def fetch_odds(sport, comp1, comp2):
 def api_odds():
     if not is_authed():
         return jsonify({'error': 'Unauthorized'}), 401
+    if not ODDS_API_KEY:
+        return jsonify({'found': False, 'reason': 'no_key'})
     sport = request.args.get('sport', '')
     comp1 = request.args.get('comp1', '')
     comp2 = request.args.get('comp2', '')
-    result = fetch_odds(sport, comp1, comp2)
-    if result:
-        return jsonify(result)
-    return jsonify({'found': False})
+    try:
+        result = fetch_odds(sport, comp1, comp2)
+        if result:
+            return jsonify(result)
+        return jsonify({'found': False, 'reason': 'no_match'})
+    except Exception:
+        return jsonify({'found': False, 'reason': 'error'})
 
 # ── Leaderboard ───────────────────────────────────────────────────────────────
 
