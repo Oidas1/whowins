@@ -436,18 +436,32 @@ def build_prompt(sport, comp1, comp2, context):
 # ── Odds API ──────────────────────────────────────────────────────────────────
 
 SPORT_KEY_MAP = {
+    # Basketball
     'nba':'basketball_nba','basketball':'basketball_nba',
+    'wnba':'basketball_wnba','ncaa basketball':'basketball_ncaab',
+    'college basketball':'basketball_ncaab',
+    # Football
     'nfl':'americanfootball_nfl','football':'americanfootball_nfl',
+    'nfl preseason':'americanfootball_nfl_preseason',
+    'college football':'americanfootball_ncaaf','ncaaf':'americanfootball_ncaaf',
+    'cfl':'americanfootball_cfl',
+    # Baseball
     'mlb':'baseball_mlb','baseball':'baseball_mlb',
+    # Hockey
     'nhl':'icehockey_nhl','hockey':'icehockey_nhl',
+    # MMA / Boxing
     'mma':'mma_mixed_martial_arts','ufc':'mma_mixed_martial_arts',
     'boxing':'boxing_boxing',
-    'mls':'soccer_usa_mls','soccer':'soccer_usa_mls',
-    'wnba':'basketball_wnba',
-    'ncaa basketball':'basketball_ncaab','college basketball':'basketball_ncaab',
-    'college football':'americanfootball_ncaaf',
-    'tennis':'tennis_atp_french_open',
-    'golf':'golf_pga_championship',
+    # Soccer
+    'soccer':'soccer_epl','football (soccer)':'soccer_epl',
+    'epl':'soccer_epl','premier league':'soccer_epl','english premier league':'soccer_epl',
+    'mls':'soccer_usa_mls','major league soccer':'soccer_usa_mls',
+    'la liga':'soccer_spain_la_liga','bundesliga':'soccer_germany_bundesliga',
+    'serie a':'soccer_italy_serie_a','ligue 1':'soccer_france_ligue_one',
+    'champions league':'soccer_uefa_champs_league',
+    'world cup':'soccer_fifa_world_cup','fifa world cup':'soccer_fifa_world_cup',
+    'fifa':'soccer_fifa_world_cup','soccer world cup':'soccer_fifa_world_cup',
+    'copa libertadores':'soccer_conmebol_copa_libertadores',
 }
 
 def american_to_pct(odds):
@@ -463,10 +477,31 @@ def name_match(api_name, user_name):
     return (u in a or a in u or
             u.split()[-1] in a or a.split()[-1] in u)
 
+def resolve_sport_key(sport):
+    s = sport.lower().strip()
+    if s in SPORT_KEY_MAP:
+        return SPORT_KEY_MAP[s]
+    # Live fuzzy match against available sports
+    try:
+        url = f"https://api.the-odds-api.com/v4/sports/?apiKey={ODDS_API_KEY}"
+        req = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
+        sports = json.loads(urllib.request.urlopen(req, timeout=5).read())
+        words = [w for w in s.split() if len(w) > 3]
+        for sp in sports:
+            title = sp['title'].lower()
+            key   = sp['key'].lower()
+            if s in title or s in key:
+                return sp['key']
+            if words and any(w in title for w in words):
+                return sp['key']
+    except Exception:
+        pass
+    return s.replace(' ', '_')
+
 def fetch_odds(sport, comp1, comp2):
     if not ODDS_API_KEY:
         return None
-    sport_key = SPORT_KEY_MAP.get(sport.lower().strip(), sport.lower().replace(' ','_'))
+    sport_key = resolve_sport_key(sport)
     try:
         url = (f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
                f"?apiKey={ODDS_API_KEY}&regions=us&markets=h2h&oddsFormat=american")
