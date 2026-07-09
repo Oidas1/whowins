@@ -372,11 +372,14 @@ Competitor A: {comp1} — evaluate strictly as a {sport} competitor. The live re
 Competitor B: {comp2} — evaluate strictly as a {sport} competitor. The live research below is authoritative — use it to identify who this person is in {sport}, even if you associate the name with another sport.
 {search_block}{context_block}
 
-OUTPUT RULES — CRITICAL:
-- Output ONLY the five lines below. Nothing else. No explanation, no prose outside the format.
+OUTPUT RULES — ABSOLUTE:
+- You MUST ALWAYS output exactly the five lines below. No exceptions.
+- NEVER refuse, explain why you can't analyze, or output anything outside these five lines.
+- Even if you have zero data on either competitor, make your best inference and set CONFIDENCE to Low.
+- If data is limited, reflect that in CONFIDENCE and REASON — but still give a WINNER and percentages.
 - Percentages must sum to exactly 100.
 - Confidence is one word: High, Medium, or Low.
-- REASON: 2 sentences max. State the 1-2 biggest deciding factors only. Be direct and specific.
+- REASON: 2 sentences max. If data is limited, say so briefly — but still commit to a pick.
 
 A_PCT: [number]
 B_PCT: [number]
