@@ -411,17 +411,18 @@ WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
 REASON: [2 sentences — decisive factors only, no hedging]"""
 
-def web_search(query):
-    """Search Tavily for real-world info. Returns a short text snippet or empty string."""
+def web_search(query, depth="basic", max_results=5):
+    """Search Tavily. depth='advanced' gives deeper crawl (costs 2 credits vs 1)."""
     if not TAVILY_API_KEY:
         return ''
     try:
         payload = json.dumps({
             "api_key": TAVILY_API_KEY,
             "query": query,
-            "search_depth": "basic",
-            "max_results": 3,
+            "search_depth": depth,
+            "max_results": max_results,
             "include_answer": True,
+            "include_raw_content": False,
         }).encode()
         req = urllib.request.Request(
             "https://api.tavily.com/search",
@@ -429,34 +430,65 @@ def web_search(query):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        res = urllib.request.urlopen(req, timeout=8)
+        res = urllib.request.urlopen(req, timeout=10)
         data = json.loads(res.read())
         parts = []
         if data.get('answer'):
             parts.append(data['answer'])
-        for r in data.get('results', [])[:3]:
+        for r in data.get('results', []):
             if r.get('content'):
-                parts.append(r['content'][:300])
+                parts.append(f"[{r.get('url','')}] {r['content'][:400]}")
         return '\n'.join(parts)
     except Exception:
         return ''
 
+def research_competitor(name, sport):
+    """Run multiple targeted searches for a single competitor and combine results."""
+    queries = [
+        f"{name} {sport} career statistics record",
+        f"{name} {sport} ranking results 2025 2026",
+        f"{name} {sport} profile biography",
+    ]
+    results = []
+    # First query gets advanced depth for richer content
+    for i, q in enumerate(queries):
+        depth = "advanced" if i == 0 else "basic"
+        result = web_search(q, depth=depth, max_results=4)
+        if result:
+            results.append(result)
+    return '\n'.join(results) if results else ''
+
 def build_prompt(sport, comp1, comp2, context):
-    # Live search for each competitor to ground Claude in real facts
-    search1 = web_search(f"{comp1} {sport} player career stats")
-    search2 = web_search(f"{comp2} {sport} player career stats")
+    # Run parallel research using threading for speed
+    research = {}
+    threads = []
+
+    def fetch(key, fn, *args):
+        research[key] = fn(*args)
+
+    t1 = threading.Thread(target=fetch, args=('comp1', research_competitor, comp1, sport))
+    t2 = threading.Thread(target=fetch, args=('comp2', research_competitor, comp2, sport))
+    t3 = threading.Thread(target=fetch, args=('h2h', web_search,
+        f"{comp1} vs {comp2} {sport} head to head history", "basic", 4))
+
+    for t in [t1, t2, t3]:
+        t.start()
+    for t in [t1, t2, t3]:
+        t.join(timeout=12)
 
     search_block = ''
-    if search1 or search2:
-        search_block = '\nLIVE RESEARCH (use this to identify and evaluate each competitor accurately):\n'
-        if search1:
-            search_block += f'\n[{comp1} — {sport}]\n{search1}\n'
-        if search2:
-            search_block += f'\n[{comp2} — {sport}]\n{search2}\n'
+    if any(research.values()):
+        search_block = '\n\nLIVE RESEARCH — treat this as authoritative. Use it to identify and evaluate each competitor:\n'
+        if research.get('comp1'):
+            search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
+        if research.get('comp2'):
+            search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
+        if research.get('h2h'):
+            search_block += f'\n[HEAD-TO-HEAD HISTORY]\n{research["h2h"]}\n'
 
     context_block = ''
     if context.strip():
-        context_block = f'\nAdditional context: {context}'
+        context_block = f'\nAdditional context from user: {context}'
 
     return ANALYSIS_PROMPT.format(
         sport=sport, comp1=comp1, comp2=comp2,
