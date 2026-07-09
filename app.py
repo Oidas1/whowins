@@ -33,6 +33,14 @@ _password_store = {'value': os.environ.get('SITE_PASSWORD', 'whowins2026')}
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
+class UserProfile(db.Model):
+    __tablename__ = 'ww_users'
+    id          = db.Column(db.Integer, primary_key=True)
+    user_uid    = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    referred_by = db.Column(db.String(64), nullable=True)   # uid of referrer
+    first_seen  = db.Column(db.DateTime, default=datetime.utcnow)
+    last_seen   = db.Column(db.DateTime, default=datetime.utcnow)
+
 class Query(db.Model):
     __tablename__ = 'ww_queries'
     id           = db.Column(db.Integer, primary_key=True)
@@ -97,21 +105,38 @@ def is_authed():
 def get_user_uid():
     if 'user_uid' not in session:
         session['user_uid'] = str(uuid.uuid4())
-    return session['user_uid']
+    uid = session['user_uid']
+    profile = UserProfile.query.filter_by(user_uid=uid).first()
+    if profile is None:
+        profile = UserProfile(
+            user_uid=uid,
+            referred_by=session.get('ref')
+        )
+        db.session.add(profile)
+        db.session.commit()
+    else:
+        profile.last_seen = datetime.utcnow()
+        db.session.commit()
+    return uid
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Store referral code from URL before login
+    ref = request.args.get('ref') or request.form.get('ref')
+    if ref:
+        session['ref'] = ref
+
     error = None
     if request.method == 'POST':
         if request.form.get('password') == get_password():
             session['authed'] = True
-            get_user_uid()          # assign persistent user ID on first login
+            get_user_uid()
             rotate_password()
             return redirect(url_for('index'))
         error = 'Wrong password. Try again.'
-    return render_template('login.html', error=error)
+    return render_template('login.html', error=error, ref=ref or session.get('ref', ''))
 
 @app.route('/logout')
 def logout():
@@ -123,6 +148,39 @@ def admin_password():
     if request.args.get('key') != ADMIN_KEY:
         return 'Unauthorized.', 403
     return render_template('admin_password.html', password=get_password())
+
+@app.route('/admin/users')
+def admin_users():
+    if request.args.get('key') != ADMIN_KEY:
+        return 'Unauthorized.', 403
+
+    users = UserProfile.query.order_by(UserProfile.first_seen.desc()).all()
+    user_data = []
+    for u in users:
+        queries  = Query.query.filter_by(user_uid=u.user_uid).all()
+        wins     = sum(1 for q in queries if q.outcome == 'win')
+        losses   = sum(1 for q in queries if q.outcome == 'loss')
+        referrals = UserProfile.query.filter_by(referred_by=u.user_uid).count()
+        user_data.append({
+            'uid':       u.user_uid[:8] + '…',
+            'full_uid':  u.user_uid,
+            'joined':    u.first_seen.strftime('%b %d, %Y'),
+            'last_seen': u.last_seen.strftime('%b %d, %Y'),
+            'queries':   len(queries),
+            'wins':      wins,
+            'losses':    losses,
+            'referrals': referrals,
+            'referred_by': (u.referred_by[:8] + '…') if u.referred_by else '—',
+        })
+
+    total_users   = len(users)
+    total_queries = Query.query.count()
+    return render_template('admin_users.html',
+        users=user_data,
+        total_users=total_users,
+        total_queries=total_queries,
+        admin_key=ADMIN_KEY
+    )
 
 # ── Main routes ───────────────────────────────────────────────────────────────
 

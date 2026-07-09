@@ -168,6 +168,15 @@ function copyResult() {
   });
 }
 
+function copyRef() {
+  const input = document.getElementById('refLink');
+  if (!input) return;
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = document.querySelector('.btn-copy-ref');
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 2000); }
+  });
+}
+
 async function saveToJournal(sport, comp1, comp2, analysis) {
   if (!analysis || analysis.startsWith('ERROR')) return;
   try {

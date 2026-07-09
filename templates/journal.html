@@ -18,6 +18,16 @@
 <main>
   <div class="journal-wrap">
 
+    <!-- Referral link -->
+    <div class="referral-card">
+      <div class="referral-label">🔗 Your invite link</div>
+      <div class="referral-row">
+        <input class="referral-input" id="refLink" value="{{ request.host_url }}login?ref={{ session.get('user_uid','') }}" readonly>
+        <button class="btn-copy-ref" onclick="copyRef()">Copy</button>
+      </div>
+      <p class="referral-hint">Share this link — you'll see everyone who joins through it.</p>
+    </div>
+
     {% if entries %}
 
     {% set wins   = entries|selectattr('outcome','equalto','win') |list|length %}
@@ -39,7 +49,7 @@
         <span class="stat-label">Losses ✗</span>
       </div>
       <div class="stat-box">
-        <span class="stat-num">{% if settled > 0 %}{{ ((wins / settled) * 100)|round|int }}%{% else %}—{% endif %}</span>
+        <span class="stat-num">{% if settled %}{{ ((wins / settled) * 100)|round|int }}%{% else %}—{% endif %}</span>
         <span class="stat-label">Hit Rate</span>
       </div>
     </div>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Users</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/admin/password?key={{ admin_key }}" class="nav-link">Password</a>
+    <a href="/admin/users?key={{ admin_key }}" class="nav-link active">Users</a>
+  </nav>
+</header>
+
+<main>
+  <div class="admin-wrap">
+
+    <div class="journal-stats">
+      <div class="stat-box">
+        <span class="stat-num">{{ total_users }}</span>
+        <span class="stat-label">Total Users</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-num">{{ total_queries }}</span>
+        <span class="stat-label">Total Lookups</span>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Joined</th>
+            <th>Last Active</th>
+            <th>Lookups</th>
+            <th>W</th>
+            <th>L</th>
+            <th>Referrals</th>
+            <th>Referred By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td class="uid-cell" title="{{ u.full_uid }}">{{ u.uid }}</td>
+            <td>{{ u.joined }}</td>
+            <td>{{ u.last_seen }}</td>
+            <td><strong>{{ u.queries }}</strong></td>
+            <td class="win-cell">{{ u.wins }}</td>
+            <td class="loss-cell">{{ u.losses }}</td>
+            <td>{% if u.referrals %}<strong>{{ u.referrals }}</strong>{% else %}—{% endif %}</td>
+            <td class="uid-cell">{{ u.referred_by }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>
