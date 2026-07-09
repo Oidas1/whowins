@@ -347,14 +347,36 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 
 .reason-text {
   font-size: 0.88rem;
-  line-height: 1.65;
-  color: var(--muted);
-  text-align: center;
-  padding: 14px 16px;
+  line-height: 1.7;
+  color: var(--text);
+  padding: 16px 18px;
   background: var(--surface2);
   border-radius: 10px;
   border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+
+.reason-line {
+  display: block;
+  padding-left: 14px;
+  position: relative;
+  color: var(--muted);
+}
+.reason-line:first-child {
+  color: var(--text);
+  font-weight: 600;
+  padding-left: 0;
+}
+.reason-line::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.reason-line:first-child::before { display: none; }
 
 .conf-badge-big {
   font-size: 0.85rem;

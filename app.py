@@ -400,16 +400,22 @@ Weight phases 35/25/25/15. Be decisive — do not default to 50/50 unless eviden
 - LOW confidence: data is limited, phases conflict, or matchup is genuinely close
 
 OUTPUT RULES — ABSOLUTE:
-- Output ONLY the five lines below. Nothing else. Zero prose outside this format.
+- Output ONLY the six lines below. Nothing else. Zero prose outside this format.
 - NEVER refuse. With zero data, make best inference and set CONFIDENCE to Low.
 - Percentages must sum to exactly 100.
-- REASON: 2 sentences max. Name the 1-2 decisive factors. Commit to the pick.
+- REASON must be 3-5 sentences following this structure:
+  Sentence 1: Level/ranking edge — cite specific rankings, ratings, or competition level (e.g. "Quan competes at Challenger 75/100 level, a full tier above Zamora's ITF M15 circuit.")
+  Sentence 2: H2H evidence if it exists — cite actual score, tournament, date (e.g. "Quan leads H2H 1-0, beating Zamora 6-3 7-6(4) at M15 Rancho Santa Fe in June 2025.")
+  Sentence 3: Key deciding factor — the one thing that matters most in this specific matchup.
+  Sentence 4 (optional): Significant caution flag or condition that could shift the result.
+  Rule: cite real data points — tournament names, scores, rankings, stats — wherever you know them. If you don't know specific data, state what you do know and keep it brief.
 
 A_PCT: [number]
 B_PCT: [number]
 WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
-REASON: [2 sentences — decisive factors only, no hedging]"""
+EDGE: [number] (how many percentage points above 50% your pick is — e.g. if A_PCT is 68, EDGE is 18)
+REASON: [3-5 sentences with specific evidence as structured above]"""
 
 def web_search(query, depth="basic", max_results=5):
     """Search Tavily. depth='advanced' gives deeper crawl (costs 2 credits vs 1)."""

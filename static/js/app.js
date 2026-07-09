@@ -91,12 +91,15 @@ function parse(text) {
     const m = text.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
     return m ? m[1].trim() : '';
   };
+  // REASON may span multiple lines — grab everything after "REASON: "
+  const reasonMatch = text.match(/^REASON:\s*(.+?)(?=\n[A-Z_]+:|$)/ms);
   return {
     aPct:       parseInt(get('A_PCT'))  || 50,
     bPct:       parseInt(get('B_PCT'))  || 50,
     winner:     get('WINNER'),
     confidence: get('CONFIDENCE') || 'Medium',
-    reason:     get('REASON') || '',
+    edge:       parseInt(get('EDGE')) || null,
+    reason:     reasonMatch ? reasonMatch[1].trim() : get('REASON'),
   };
 }
 
@@ -135,7 +138,11 @@ function render(d) {
 
   const reasonEl = document.getElementById('reasonText');
   if (d.reason) {
-    reasonEl.textContent = d.reason;
+    reasonEl.innerHTML = d.reason
+      .split(/\n+/)
+      .filter(s => s.trim())
+      .map(s => `<span class="reason-line">${s.trim()}</span>`)
+      .join('');
     reasonEl.style.display = 'block';
   } else {
     reasonEl.style.display = 'none';
