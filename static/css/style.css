@@ -800,6 +800,240 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 }
 .event-matchup span { color: var(--muted); font-weight: 400; margin: 0 4px; }
 
+/* ── Parlay Slip Tray ────────────────────────────── */
+.slip-tray {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  width: 340px;
+  max-height: 80vh;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  z-index: 500;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  animation: fadeUp 0.25s ease;
+}
+
+.slip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.slip-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text);
+  flex: 1;
+  letter-spacing: 0.3px;
+}
+
+.slip-count {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.slip-clear {
+  font-size: 0.72rem;
+  color: var(--red);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+.slip-clear:hover { text-decoration: underline; }
+
+.slip-picks { display: flex; flex-direction: column; gap: 8px; }
+
+.slip-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.slip-pick-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.slip-pick-sport  { font-size: 0.65rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.slip-pick-match  { font-size: 0.78rem; color: var(--muted); text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slip-pick-winner { font-size: 0.78rem; color: var(--text); text-transform: capitalize; }
+.slip-pick-winner strong { color: var(--accent); }
+
+.slip-pick-remove {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+.slip-pick-remove:hover { color: var(--red); }
+
+.slip-stats {
+  display: flex;
+  gap: 12px;
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.slip-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: center;
+}
+.slip-stat-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.slip-stat-val   { font-size: 1.3rem; font-weight: 900; color: var(--accent); }
+
+.slip-warning {
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.4;
+  text-align: center;
+}
+
+.btn-lock-slip {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.2s;
+  font-family: inherit;
+}
+.btn-lock-slip:hover    { background: var(--accent2); }
+.btn-lock-slip:disabled { opacity: 0.5; cursor: default; }
+
+.slip-saved-msg {
+  display: none;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--green);
+}
+
+/* Floating action button */
+.slip-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 16px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 50px;
+  padding: 12px 20px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  z-index: 499;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 16px rgba(240,180,41,0.35);
+  transition: transform 0.2s, background 0.2s;
+  font-family: inherit;
+}
+.slip-fab:hover { background: var(--accent2); transform: scale(1.04); }
+
+@keyframes fabPulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.slip-fab-pulse { animation: fabPulse 0.5s ease; }
+
+/* Add to slip button */
+.btn-add-slip { border-color: var(--accent); color: var(--accent); }
+.btn-add-slip:hover { background: rgba(240,180,41,0.08); }
+.btn-added { background: rgba(122,170,130,0.12) !important; color: var(--green) !important; border-color: var(--green) !important; }
+
+/* ── Parlay Journal Cards ─────────────────────────── */
+.parlay-section { display: flex; flex-direction: column; gap: 10px; }
+
+.parlay-card {
+  background: var(--surface);
+  border: 1px solid rgba(240,180,41,0.2);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.parlay-card.card-win  { border-color: rgba(122,170,130,0.4); background: linear-gradient(135deg, var(--surface), #161e17); }
+.parlay-card.card-loss { border-color: rgba(196,122,114,0.35); background: linear-gradient(135deg, var(--surface), #1e1614); }
+
+.parlay-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.parlay-meta { display: flex; align-items: center; gap: 10px; }
+
+.parlay-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 50px;
+  background: rgba(240,180,41,0.12);
+  color: var(--accent);
+  border: 1px solid rgba(240,180,41,0.25);
+}
+
+.parlay-picks { display: flex; flex-direction: column; gap: 6px; }
+
+.parlay-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  flex-wrap: wrap;
+}
+.parlay-pick-match  { color: var(--muted); flex: 1; text-transform: capitalize; }
+.parlay-pick-winner { font-weight: 700; color: var(--text); white-space: nowrap; }
+.parlay-pct         { font-size: 0.75rem; color: var(--accent); margin-left: 2px; }
+
+.parlay-stats-row {
+  display: flex;
+  gap: 12px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.parlay-stat       { flex: 1; text-align: center; }
+.parlay-stat-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; display: block; }
+.parlay-stat-val   { font-size: 1.1rem; font-weight: 900; color: var(--accent); }
+
+@media (max-width: 600px) {
+  .slip-tray { width: calc(100vw - 32px); right: 16px; bottom: 72px; }
+  .slip-fab  { bottom: 16px; }
+}
+
 /* ── Prediction Markets ──────────────────────────── */
 .markets-header {
   display: flex;

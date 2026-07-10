@@ -21,6 +21,72 @@
 <main>
   <div class="journal-wrap">
 
+    {% if parlays %}
+    <div class="parlay-section">
+      <div class="below-label">🎯 Parlay Slips</div>
+      {% for p in parlays %}
+      <div class="parlay-card {% if p.outcome == 'win' %}card-win{% elif p.outcome == 'loss' %}card-loss{% endif %}">
+        <div class="parlay-card-top">
+          <div class="parlay-meta">
+            <span class="parlay-badge">{{ p.picks|length }}-pick Parlay</span>
+            <span class="journal-date">{{ p.created_at.strftime('%b %d, %Y') }}</span>
+          </div>
+          <form method="POST" action="/parlay/delete/{{ p.id }}" onsubmit="return confirm('Delete this parlay?')">
+            <button type="submit" class="btn-delete">✕</button>
+          </form>
+        </div>
+
+        <div class="parlay-picks">
+          {% for pick in p.picks %}
+          <div class="parlay-pick-row">
+            <span class="sport-tag">{{ pick.sport }}</span>
+            <span class="parlay-pick-match" style="text-transform:capitalize">{{ pick.comp1 }} vs {{ pick.comp2 }}</span>
+            <span class="parlay-pick-winner" style="text-transform:capitalize">{{ pick.winner }} <span class="parlay-pct">{{ pick.pct }}%</span></span>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="parlay-stats-row">
+          <div class="parlay-stat">
+            <span class="parlay-stat-label">Combined</span>
+            <span class="parlay-stat-val">{{ p.combined_pct }}%</span>
+          </div>
+          <div class="parlay-stat">
+            <span class="parlay-stat-label">Fair Payout</span>
+            <span class="parlay-stat-val">{{ p.fair_odds }}x</span>
+          </div>
+        </div>
+
+        <div class="outcome-row">
+          {% if p.outcome == 'pending' %}
+            <span class="outcome-label">Mark result:</span>
+            <form method="POST" action="/parlay/outcome/{{ p.id }}" style="display:inline">
+              <input type="hidden" name="outcome" value="win">
+              <button type="submit" class="btn-outcome btn-win">✓ All Won</button>
+            </form>
+            <form method="POST" action="/parlay/outcome/{{ p.id }}" style="display:inline">
+              <input type="hidden" name="outcome" value="loss">
+              <button type="submit" class="btn-outcome btn-loss">✗ Lost</button>
+            </form>
+          {% elif p.outcome == 'win' %}
+            <span class="outcome-badge outcome-win">✓ All Won</span>
+            <form method="POST" action="/parlay/outcome/{{ p.id }}" style="display:inline">
+              <input type="hidden" name="outcome" value="pending">
+              <button type="submit" class="btn-undo">Undo</button>
+            </form>
+          {% elif p.outcome == 'loss' %}
+            <span class="outcome-badge outcome-loss">✗ Lost</span>
+            <form method="POST" action="/parlay/outcome/{{ p.id }}" style="display:inline">
+              <input type="hidden" name="outcome" value="pending">
+              <button type="submit" class="btn-undo">Undo</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     {% if entries %}
 
     {% set wins    = entries|selectattr('outcome','equalto','win')|list|length %}

@@ -48,6 +48,16 @@ class UserProfile(db.Model):
     first_seen  = db.Column(db.DateTime, default=datetime.utcnow)
     last_seen   = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Parlay(db.Model):
+    __tablename__ = 'ww_parlays'
+    id          = db.Column(db.Integer, primary_key=True)
+    user_uid    = db.Column(db.String(64), nullable=False, index=True)
+    picks       = db.Column(db.JSON)        # list of pick dicts
+    combined_pct= db.Column(db.Float)       # combined win probability %
+    fair_odds   = db.Column(db.Float)       # 1 / combined_pct * 100
+    outcome     = db.Column(db.String(10), default='pending')  # pending / win / loss
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
+
 class Query(db.Model):
     __tablename__ = 'ww_queries'
     id           = db.Column(db.Integer, primary_key=True)
@@ -229,9 +239,10 @@ def index():
 def journal():
     if not is_authed():
         return redirect(url_for('login'))
-    uid = get_user_uid()
+    uid     = get_user_uid()
     entries = Query.query.filter_by(user_uid=uid).order_by(Query.created_at.desc()).all()
-    return render_template('journal.html', entries=entries)
+    parlays = Parlay.query.filter_by(user_uid=uid).order_by(Parlay.created_at.desc()).all()
+    return render_template('journal.html', entries=entries, parlays=parlays)
 
 @app.route('/journal/save', methods=['POST'])
 def journal_save():
@@ -299,6 +310,59 @@ def journal_delete(entry_id):
     if entry.user_uid != get_user_uid():
         return jsonify({'error': 'Forbidden'}), 403
     db.session.delete(entry)
+    db.session.commit()
+    return redirect(url_for('journal'))
+
+# ── Parlay ────────────────────────────────────────────────────────────────────
+
+@app.route('/parlay/save', methods=['POST'])
+def parlay_save():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json() or {}
+    picks = data.get('picks', [])
+    if not picks:
+        return jsonify({'error': 'No picks'}), 400
+
+    # Combined probability = product of all win percentages
+    combined = 1.0
+    for p in picks:
+        combined *= (p.get('pct', 50) / 100)
+    combined_pct = round(combined * 100, 2)
+    fair_odds    = round(1 / combined, 2) if combined > 0 else 0
+
+    parlay = Parlay(
+        user_uid     = get_user_uid(),
+        picks        = picks,
+        combined_pct = combined_pct,
+        fair_odds    = fair_odds,
+    )
+    db.session.add(parlay)
+    db.session.commit()
+    return jsonify({'ok': True, 'id': parlay.id, 'combined_pct': combined_pct, 'fair_odds': fair_odds})
+
+@app.route('/parlay/outcome/<int:parlay_id>', methods=['POST'])
+def parlay_outcome(parlay_id):
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    parlay = Parlay.query.get_or_404(parlay_id)
+    if parlay.user_uid != get_user_uid():
+        return jsonify({'error': 'Forbidden'}), 403
+    outcome = request.form.get('outcome', 'pending')
+    if outcome not in ('win', 'loss', 'pending'):
+        return jsonify({'error': 'Invalid'}), 400
+    parlay.outcome = outcome
+    db.session.commit()
+    return redirect(url_for('journal'))
+
+@app.route('/parlay/delete/<int:parlay_id>', methods=['POST'])
+def parlay_delete(parlay_id):
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    parlay = Parlay.query.get_or_404(parlay_id)
+    if parlay.user_uid != get_user_uid():
+        return jsonify({'error': 'Forbidden'}), 403
+    db.session.delete(parlay)
     db.session.commit()
     return redirect(url_for('journal'))
 

@@ -170,6 +170,7 @@
 
     <div class="result-actions">
       <button class="btn-action btn-new-search" onclick="newSearch()">🔄 New Search</button>
+      <button class="btn-action btn-add-slip" id="addSlipBtn" onclick="addToSlip()">➕ Add to Slip</button>
       <button class="btn-action" id="shareBtn" onclick="shareImage()">🖼️ Share Card</button>
       <button class="btn-action" onclick="copyResult()">📋 Copy</button>
       <span class="copied-msg" id="copiedMsg">Copied!</span>
@@ -186,5 +187,40 @@
 </main>
 
 <script src="/static/js/app.js"></script>
+
+<!-- Parlay slip tray -->
+<div class="slip-tray" id="slipTray" style="display:none">
+  <div class="slip-header">
+    <span class="slip-title">🎯 Parlay Slip</span>
+    <span class="slip-count" id="slipCount">0 picks</span>
+    <button class="slip-clear" onclick="clearSlip()">Clear</button>
+  </div>
+
+  <div class="slip-picks" id="slipPicks"></div>
+
+  <div class="slip-stats" id="slipStats" style="display:none">
+    <div class="slip-stat">
+      <span class="slip-stat-label">Combined Probability</span>
+      <span class="slip-stat-val" id="slipPct">—</span>
+    </div>
+    <div class="slip-stat">
+      <span class="slip-stat-label">Fair Payout</span>
+      <span class="slip-stat-val" id="slipOdds">—</span>
+    </div>
+  </div>
+
+  <div class="slip-warning">⚠️ Parlay probability drops with each added pick. For informational use only.</div>
+
+  <button class="btn-lock-slip" id="lockSlipBtn" onclick="lockSlip()" style="display:none">
+    🔒 Lock Slip &amp; Save to Journal
+  </button>
+
+  <span class="slip-saved-msg" id="slipSavedMsg">Saved to Journal!</span>
+</div>
+
+<!-- Slip toggle button (fixed) -->
+<button class="slip-fab" id="slipFab" onclick="toggleSlip()" style="display:none">
+  🎯 <span id="slipFabCount">0</span>
+</button>
 </body>
 </html>

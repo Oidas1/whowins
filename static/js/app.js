@@ -352,6 +352,142 @@ function copyResult() {
   });
 }
 
+// ── Parlay Slip ───────────────────────────────────
+
+let slip = [];   // [{sport, comp1, comp2, winner, pct, label}]
+let slipOpen = false;
+
+function addToSlip() {
+  if (!resultData || !resultData.winner) return;
+
+  const aWins = resultData.winner.toLowerCase().includes(currentComp1.split(' ')[0].toLowerCase()) ||
+                currentComp1.toLowerCase().includes(resultData.winner.split(' ')[0].toLowerCase());
+
+  const pick = {
+    sport:   currentSport,
+    comp1:   currentComp1,
+    comp2:   currentComp2,
+    winner:  resultData.winner,
+    pct:     aWins ? resultData.aPct : resultData.bPct,
+    label:   `${currentComp1} vs ${currentComp2}`,
+  };
+
+  // Avoid duplicate matchups
+  const exists = slip.find(p => p.comp1 === pick.comp1 && p.comp2 === pick.comp2);
+  if (exists) {
+    const btn = document.getElementById('addSlipBtn');
+    btn.textContent = '✓ Already in slip';
+    setTimeout(() => { btn.textContent = '➕ Add to Slip'; }, 1500);
+    return;
+  }
+
+  slip.push(pick);
+  renderSlip();
+
+  const fab = document.getElementById('slipFab');
+  fab.style.display = 'flex';
+  if (!slipOpen) {
+    fab.classList.add('slip-fab-pulse');
+    setTimeout(() => fab.classList.remove('slip-fab-pulse'), 600);
+  }
+
+  const btn = document.getElementById('addSlipBtn');
+  btn.textContent = '✓ Added!';
+  btn.classList.add('btn-added');
+  setTimeout(() => { btn.textContent = '➕ Add to Slip'; btn.classList.remove('btn-added'); }, 1500);
+
+  if (!slipOpen) openSlip();
+}
+
+function removeFromSlip(idx) {
+  slip.splice(idx, 1);
+  renderSlip();
+  if (slip.length === 0) {
+    document.getElementById('slipFab').style.display = 'none';
+  }
+}
+
+function clearSlip() {
+  slip = [];
+  renderSlip();
+  closeSlip();
+  document.getElementById('slipFab').style.display = 'none';
+}
+
+function renderSlip() {
+  const picksEl  = document.getElementById('slipPicks');
+  const statsEl  = document.getElementById('slipStats');
+  const lockBtn  = document.getElementById('lockSlipBtn');
+  const countEl  = document.getElementById('slipCount');
+  const fabCount = document.getElementById('slipFabCount');
+
+  countEl.textContent  = `${slip.length} pick${slip.length !== 1 ? 's' : ''}`;
+  fabCount.textContent = slip.length;
+
+  picksEl.innerHTML = '';
+  slip.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'slip-pick';
+    div.innerHTML = `
+      <div class="slip-pick-info">
+        <span class="slip-pick-sport">${p.sport}</span>
+        <span class="slip-pick-match">${p.comp1} vs ${p.comp2}</span>
+        <span class="slip-pick-winner">Pick: <strong>${p.winner}</strong> ${p.pct}%</span>
+      </div>
+      <button class="slip-pick-remove" onclick="removeFromSlip(${i})">✕</button>
+    `;
+    picksEl.appendChild(div);
+  });
+
+  if (slip.length >= 2) {
+    const combined = slip.reduce((acc, p) => acc * (p.pct / 100), 1);
+    const combinedPct  = (combined * 100).toFixed(1);
+    const fairOdds = (1 / combined).toFixed(2);
+    document.getElementById('slipPct').textContent  = `${combinedPct}%`;
+    document.getElementById('slipOdds').textContent = `${fairOdds}x`;
+    statsEl.style.display = 'flex';
+    lockBtn.style.display = 'block';
+  } else {
+    statsEl.style.display = 'none';
+    lockBtn.style.display = slip.length === 0 ? 'none' : 'none';
+  }
+
+  document.getElementById('slipSavedMsg').style.display = 'none';
+}
+
+async function lockSlip() {
+  if (slip.length < 2) return;
+  const btn = document.getElementById('lockSlipBtn');
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/parlay/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ picks: slip }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const msg = document.getElementById('slipSavedMsg');
+      msg.style.display = 'block';
+      btn.textContent = '✓ Saved!';
+      setTimeout(() => {
+        clearSlip();
+        btn.textContent = '🔒 Lock Slip & Save to Journal';
+        btn.disabled = false;
+      }, 1800);
+    }
+  } catch (_) {
+    btn.textContent = '🔒 Lock Slip & Save to Journal';
+    btn.disabled = false;
+  }
+}
+
+function openSlip()  { slipOpen = true;  document.getElementById('slipTray').style.display = 'flex'; }
+function closeSlip() { slipOpen = false; document.getElementById('slipTray').style.display = 'none'; }
+function toggleSlip() { slipOpen ? closeSlip() : openSlip(); }
+
 // ── Prediction Markets ────────────────────────────
 
 async function loadMarkets(sport, comp1, comp2, aiA, aiB) {
