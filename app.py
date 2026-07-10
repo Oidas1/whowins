@@ -415,103 +415,98 @@ def parse_winner(text):
         return w.group(1).strip(), (c.group(1).strip() if c else 'Medium')
     return None, None
 
-ANALYSIS_PROMPT = """You are an elite quantitative sports analyst. You apply rigorous mathematical models combined with deep scouting knowledge. Your predictions outperform simple favorites-picking because you use the right formula for the right sport.
+ANALYSIS_PROMPT = """You are an elite quantitative analyst. You apply rigorous mathematical models and deep research knowledge to predict outcomes across any competitive domain — sports, politics, markets, entertainment, business, and beyond.
 
-SPORT: {sport}
-COMPETITOR A: {comp1}
-COMPETITOR B: {comp2}
+TOPIC: {sport}
+SUBJECT A: {comp1}
+SUBJECT B: {comp2}
 {vegas_block}{search_block}{context_block}
 
 MATHEMATICAL ANALYSIS PROTOCOL (run all steps silently — never appear in output):
 
 CRITICAL KNOWLEDGE RULE:
-Your training data contains extensive knowledge of professional and amateur sports worldwide — ATP/WTA/ITF rankings, college tennis ITA rankings, UTR ratings, Challenger/Futures circuits, NCAA programs, NFL/NBA/MLB/NHL player stats, boxing records, MMA fight histories, and much more.
-ALWAYS draw on this training knowledge first. The supplemental live research above may add recent data, but an empty research result does NOT mean you have no knowledge — it means the web search didn't return results. If you know a player from training, use that knowledge. If you genuinely have no knowledge of either competitor from any source, set CONFIDENCE to Low — but never assume ignorance when you actually know something.
-For college athletes: recall NCAA division, conference (SEC/ACC/Big Ten etc.), ITA ranking, and recent season performance. These are in your training data.
-For ITF/Challenger players: recall ATP ranking, career high, win/loss records, and competition level. These are in your training data.
+Your training data contains deep knowledge across all competitive domains. For sports: ATP/WTA/ITF rankings, UTR ratings, NFL/NBA/MLB/NHL stats, boxing records, MMA fight histories. For politics: polling averages, approval ratings, fundraising totals, electoral history. For crypto/finance: market caps, on-chain metrics, price history. For entertainment: chart positions, award history, streaming numbers. ALWAYS draw on this training knowledge first. Empty research results do NOT mean you have no knowledge.
 
-STEP 1 — SPORT-SPECIFIC MATHEMATICAL BASELINE:
-Choose and apply the appropriate model:
+STEP 0 — KNOWLEDGE RECALL (do this FIRST):
+Before any math, recall what you know about each subject from training data.
+KNOW_A: [everything you know about {comp1} in the context of {sport} — rankings, records, polls, stats, history]
+KNOW_B: [everything you know about {comp2} in the context of {sport} — same level of detail]
 
-TENNIS/RACKET: Elo probability formula: P(A wins) = 1 / (1 + 10^((B_Elo - A_Elo) / 400))
-  UTR gap of 1.0 = ~Elo 150 = ~70% win probability. Surface adjustment: clay vs grass specialist = +/-5-8%.
-  ATP/WTA ranking gap, Challenger vs ITF competition tier are key inputs. Apply directly.
+STEP 1 — DOMAIN-SPECIFIC ANALYTICAL BASELINE:
+Identify the domain from TOPIC and apply the appropriate model:
 
-SOCCER/FOOTBALL: Poisson model. Estimate xG for each team (attack strength x defense weakness x league avg).
-  P(A wins) = sum of P(A=i goals) x P(B=j goals, j<i) for all i,j 0-6. xG differential is the strongest single predictor.
+SPORTS (NBA/NFL/MLB/Soccer/Tennis/Boxing/MMA/Golf):
+  Tennis: Elo formula P = 1/(1+10^((B_Elo-A_Elo)/400)). UTR gap 1.0 = ~70% win prob.
+  Soccer: Poisson model on xG. Basketball: Pythagorean W% = Pts^13.91/(Pts^13.91+PA^13.91).
+  NFL: 1 spread point = 2.8% shift. Baseball: Log5 formula. MMA/Boxing: strike accuracy, finishing rate.
 
-BASKETBALL: Pythagorean expectation W% = Pts^13.91 / (Pts^13.91 + Pts_allowed^13.91).
-  Net rating differential: each +1.0 net rating = +2.5% win probability. True Shooting edge: +3% TS = +2% win prob.
+POLITICS / ELECTIONS:
+  Polling average gap: each +5% polling lead = ~+8% win probability, with incumbency +3%.
+  Fundraising edge: each 2x fundraising advantage = ~+3% probability.
+  Historical base rates: incumbent advantage, electoral college/geography, approval rating baseline.
+  Apply: P(A wins) = base_rate + polling_adjustment + fundamentals_adjustment + momentum.
 
-NFL/AMERICAN FOOTBALL: Point spread model. Each 1 point on spread = 2.8% shift from 50%.
-  3-point favorite = 58% win prob. 7-point = 69%. Turnover margin: +1 per game = +4% win prob.
+CRYPTO / FINANCE:
+  Market dominance: relative market cap, 30-day price momentum, developer activity (GitHub commits).
+  Adoption metrics: daily active wallets, transaction volume, institutional holding %.
+  Macro environment: interest rate sensitivity, risk-on/risk-off positioning.
 
-BASEBALL: Log5 formula: P(A beats B) = (WP_A - WP_A x WP_B) / (WP_A + WP_B - 2 x WP_A x WP_B)
-  Pitching matchup dominates (~60% of edge). ERA differential is primary input.
+ENTERTAINMENT / AWARDS:
+  Historical base rate: prior wins in this category, nomination frequency.
+  Critical momentum: Metacritic/Rotten Tomatoes score, social media sentiment, precursor awards won.
+  Industry positioning: label/studio support, campaign spend, public popularity.
 
-MMA/BOXING: No clean formula. Use strike accuracy differential, finishing rate, takedown defense %, control time %.
-  Style math: southpaw vs orthodox historically gives southpaw ~52/48 edge in boxing.
+BUSINESS / COMPANIES:
+  Revenue growth differential, market cap trajectory, product pipeline strength.
+  Competitive moat depth, customer retention, margin comparison.
 
-GENERAL: Start 50/50. Apply each adjustment below as direct percentage shifts.
+GEOPOLITICS:
+  Power asymmetry (GDP, military, alliance structure), historical precedent, current leverage.
+  Diplomatic positioning, public opinion in relevant regions.
 
-STEP 2 — TEMPORAL WEIGHTING (exponential decay on recent form):
-  Weight multipliers: most recent = 1.0x, one before = 0.75x, two before = 0.56x, three before = 0.42x, four before = 0.32x.
-  Weighted win rate = sum(result x weight) / sum(weights). This prevents stale results from distorting current form.
+GENERAL (anything else):
+  Start 50/50, apply evidence-weighted adjustments for each advantage found.
 
-STEP 3 — QUANTIFIED CONTEXTUAL ADJUSTMENTS (add/subtract % from baseline):
-  Home venue advantage: +3.5% team sports, +2% individual sports
-  Altitude advantage (acclimatized team): +2%
-  Travel fatigue (long-haul, under 48hrs rest): -3%
-  Injury impact: -5% minor, -10% significant, -15% severe/to key player
-  H2H edge: +1.5% per win beyond 50/50 in direct head-to-head record
-  Style mismatch advantage: +3% to +7% depending on severity of counter-style edge
-  Age curve (prime vs declining): +2% for competitor at their athletic peak
+STEP 2 — TEMPORAL WEIGHTING:
+  Most recent data = 1.0x. One period prior = 0.75x. Two prior = 0.56x. Three = 0.42x. Four = 0.32x.
+  Weight recent polls/results/form more heavily than historical averages.
 
-STEP 4 — BAYESIAN UPDATE WITH MARKET PRIOR (apply when Vegas odds are provided above):
-  Vegas lines represent aggregated sharp-money wisdom. Treat as a Bayesian prior.
-  Formula: P_final = (W x P_analysis) + ((1-W) x P_market)
-  Weight W by your confidence: High = 0.65, Medium = 0.50, Low = 0.35
-  If your analysis diverges from market by more than 15 percentage points, double-check your reasoning.
-  If evidence holds — that divergence IS the edge. Hold your position.
+STEP 3 — QUANTIFIED ADJUSTMENTS (add/subtract %):
+  SPORTS: Home +3.5%, injury -5 to -15%, H2H edge +1.5% per win above 50/50, style mismatch +3-7%
+  POLITICS: Incumbency +3%, geographic stronghold +2-5%, debate performance +/-2%, scandal -5 to -10%
+  FINANCE: Macro tailwind/headwind +/-5%, regulatory risk -5%, network effect moat +3%
+  GENERAL: Apply domain-appropriate modifiers with similar magnitude ranges
 
-STEP 5 — IT FACTOR MODIFIER (+/-5% max):
-  After all mathematical steps, apply this final adjustment for what formulas cannot capture:
-  - Will to win under maximum cost: +2% to +5%
-  - In-competition adaptation (adjusts when plan A fails): +0% to +3%
-  - Peak ceiling: who reaches higher when fully locked in? +0% to +3%
-  - Competitive hunger (motivated challenger vs comfortable champion): +0% to +2%
-  Total IT Factor adjustment capped at +5% or -5%.
+STEP 4 — BAYESIAN UPDATE (when market odds provided above):
+  P_final = (W x P_analysis) + ((1-W) x P_market)
+  W = 0.65 (High confidence), 0.50 (Medium), 0.35 (Low)
+  Market divergence >15% = re-examine assumptions, but hold if evidence is strong.
 
-STEP 6 — FINAL PROBABILITY:
-  Combine baseline + contextual adjustments + Bayesian update + IT Factor.
-  Hard cap: 95% max, 5% floor. No certainties in sports.
-  CONFIDENCE level:
-  - HIGH: mathematical baseline AND 2+ adjustments AND IT Factor all clearly favor one side
-  - MEDIUM: baseline favors one, adjustments mixed or minor uncertainty
-  - LOW: limited data, conflicting signals, or result within 5% of 50/50
+STEP 5 — IT FACTOR (+/-5% max):
+  Will to win / competitive drive under maximum pressure.
+  Peak ceiling vs current trajectory.
+  In-competition adaptability when plan A fails.
+  Hunger: motivated challenger vs comfortable frontrunner.
 
-STEP 0 — KNOWLEDGE RECALL (do this FIRST before any math):
-Before running the mathematical steps, write what you know about each competitor.
-Pull from your training data: rankings, records, programs, competition level, notable results, anything.
-Format as:
-KNOW_A: [everything you know about {comp1} as a {sport} competitor — be specific]
-KNOW_B: [everything you know about {comp2} as a {sport} competitor — be specific]
+STEP 6 — FINAL:
+  Combine all steps. Cap at 95%, floor at 5%.
+  HIGH confidence: baseline + 2+ adjustments + IT Factor all favor same side.
+  MEDIUM: baseline favors one, adjustments mixed.
+  LOW: limited data, conflicting signals, or genuinely near 50/50.
 
-Then run Steps 1-6 using that knowledge as your data foundation.
-
-OUTPUT FORMAT — output these eight lines in this exact order:
-KNOW_A: [your knowledge of {comp1} — 1-3 sentences, specific facts]
-KNOW_B: [your knowledge of {comp2} — 1-3 sentences, specific facts]
+OUTPUT FORMAT — output these eight lines exactly:
+KNOW_A: [1-3 sentences of specific facts about {comp1} in context of {sport}]
+KNOW_B: [1-3 sentences of specific facts about {comp2} in context of {sport}]
 A_PCT: [number]
 B_PCT: [number]
 WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
 EDGE: [number]
-REASON: [3-5 sentences: level/ranking edge with specifics, H2H if known, key deciding factor, optional caution flag]
+REASON: [3-5 sentences: domain-specific edge with data, H2H/polling/metrics if known, key deciding factor, caution flag if any]
 
 RULES:
 - NEVER refuse or output anything outside these eight lines.
-- With zero knowledge of either competitor, write "Unknown — limited training data" in KNOW fields and set CONFIDENCE to Low.
+- With zero knowledge, write "Unknown — limited training data" in KNOW fields, set CONFIDENCE Low.
 - Percentages sum to exactly 100.
 - REASON must cite real data points wherever you know them."""
 def web_search(query, depth="basic", max_results=5):
@@ -969,6 +964,62 @@ def api_search():
             deduped.append(r)
     return jsonify({'results': deduped[:20], 'total': len(deduped)})
 
+def fetch_general_markets(comp1, comp2, topic):
+    """For non-sports topics: search all Polymarket + Kalshi by competitor name."""
+    results = []
+    seen = set()
+
+    for mkt in _get_all_poly_markets():
+        q = mkt.get('question', '')
+        if q in seen: continue
+        q_lower = q.lower()
+        mentions_a = _name_matches(q_lower, comp1)
+        mentions_b = _name_matches(q_lower, comp2)
+        if not (mentions_a or mentions_b): continue
+        seen.add(q)
+        prices = _parse_poly_prices(mkt)
+        a_price = next((p for o,p in prices if _name_matches(o.lower(), comp1)), None)
+        b_price = next((p for o,p in prices if _name_matches(o.lower(), comp2)), None)
+        if a_price is None and b_price is None and len(prices) == 2:
+            if mentions_a: a_price = prices[0][1]; b_price = round(100-a_price,1)
+            elif mentions_b: b_price = prices[0][1]; a_price = round(100-b_price,1)
+        if a_price is None and b_price is None: continue
+        results.append({
+            'source': 'Polymarket', 'question': q,
+            'a_price': a_price, 'b_price': b_price,
+            'volume24h': float(mkt.get('volume24hr') or 0),
+            'url': f"https://polymarket.com/event/{mkt.get('slug','')}",
+            'active': True, 'live': False,
+        })
+
+    base = 'https://api.elections.kalshi.com/trade-api/v2'
+    for event in _get_all_kalshi_events():
+        title = event.get('title', '')
+        t_lower = title.lower()
+        if not (_name_matches(t_lower, comp1) or _name_matches(t_lower, comp2)): continue
+        et = event.get('event_ticker', '')
+        mkt_data = _json_get(f"{base}/events/{et}")
+        for mkt in mkt_data.get('markets', [])[:2]:
+            mt = mkt.get('title', title)
+            if mt in seen: continue
+            seen.add(mt)
+            yes_price = float(mkt.get('last_price_dollars') or mkt.get('yes_bid_dollars') or 0) * 100
+            ticker = mkt.get('ticker', '')
+            mt_lower = mt.lower()
+            a_price = b_price = None
+            if _name_matches(mt_lower, comp1): a_price = round(yes_price,1); b_price = round(100-yes_price,1)
+            elif _name_matches(mt_lower, comp2): b_price = round(yes_price,1); a_price = round(100-yes_price,1)
+            if a_price is None: continue
+            results.append({
+                'source': 'Kalshi', 'question': mt,
+                'a_price': a_price, 'b_price': b_price,
+                'volume24h': float(mkt.get('volume_24h_fp') or 0) / 100,
+                'url': f"https://kalshi.com/markets/{et.split('-')[0].lower()}/{ticker}",
+                'active': True, 'live': False,
+            })
+
+    return sorted(results, key=lambda x: -x['volume24h'])[:5]
+
 @app.route('/api/markets')
 def api_markets():
     if not is_authed():
@@ -979,9 +1030,18 @@ def api_markets():
     ai_a  = float(request.args.get('ai_a', 50))
     ai_b  = float(request.args.get('ai_b', 50))
 
-    poly = fetch_polymarket(comp1, comp2, sport)
-    kalshi = fetch_kalshi(comp1, comp2, sport)
-    all_markets = poly + kalshi
+    KNOWN_SPORTS = {'nba','nfl','mlb','nhl','soccer','football','basketball','baseball',
+                    'hockey','mma','ufc','boxing','tennis','golf','world cup','liga',
+                    'epl','mls','wta','atp','cricket','rugby','nascar','f1'}
+    is_sport = any(s in sport.lower() for s in KNOWN_SPORTS) or _is_individual_sport(sport)
+
+    if is_sport:
+        poly   = fetch_polymarket(comp1, comp2, sport)
+        kalshi = fetch_kalshi(comp1, comp2, sport)
+        all_markets = poly + kalshi
+    else:
+        all_markets = fetch_general_markets(comp1, comp2, sport)
+
 
     # Calculate value gap for each market
     for m in all_markets:
