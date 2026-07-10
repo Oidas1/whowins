@@ -514,6 +514,152 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   color: var(--text);
 }
 
+/* ── Mode tabs ───────────────────────────────────── */
+.mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.mode-tab:hover  { border-color: var(--accent); color: var(--accent); }
+.mode-tab.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+/* ── Market Search ───────────────────────────────── */
+.market-search-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.market-search-bar input {
+  flex: 1;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  color: var(--text);
+  font-size: 1rem;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+.market-search-bar input:focus { border-color: var(--accent); }
+.market-search-bar input::placeholder { color: var(--muted); }
+
+.btn-market-search {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  padding: 14px 24px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+  font-family: inherit;
+}
+.btn-market-search:hover { background: var(--accent2); }
+
+.search-results-wrap { display: flex; flex-direction: column; gap: 10px; }
+
+.search-results-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-result-count {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+.search-result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fadeUp 0.25s ease;
+  transition: border-color 0.2s;
+}
+.search-result-card:hover { border-color: var(--accent); }
+
+.search-result-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.search-badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.search-cat-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 50px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.search-question {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.search-prices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.search-outcome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.search-outcome-name { font-size: 0.78rem; color: var(--muted); }
+.search-outcome-pct  { font-size: 0.95rem; font-weight: 900; color: var(--accent); }
+
+.search-vol {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.search-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 /* ── Disclaimer banner ───────────────────────────── */
 .disclaimer-banner {
   display: flex;

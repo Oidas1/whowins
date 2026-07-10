@@ -721,21 +721,42 @@ def _is_sport_market(question):
 def _is_individual_sport(sport):
     return any(s in sport.lower() for s in _INDIVIDUAL_SPORTS)
 
-_poly_cache = {'data': [], 'ts': 0}
+_poly_cache   = {'data': [], 'ts': 0}
+_kalshi_all_cache = {'data': [], 'ts': 0}
 
 def _get_all_poly_markets():
-    """Fetch all active Polymarket sports markets (cached 10 min)."""
-    if time.time() - _poly_cache['ts'] < 600 and _poly_cache['data']:
+    """Fetch all active Polymarket markets across all categories (cached 15 min)."""
+    if time.time() - _poly_cache['ts'] < 900 and _poly_cache['data']:
         return _poly_cache['data']
     markets = []
-    for offset in [0, 100, 200]:
+    for offset in range(0, 1600, 100):
         data = _json_get(f"https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=100&offset={offset}")
-        if isinstance(data, list):
+        if isinstance(data, list) and data:
             markets.extend(data)
+            if len(data) < 100:
+                break
         else:
             break
     _poly_cache['data'] = markets
     _poly_cache['ts'] = time.time()
+
+def _get_all_kalshi_events():
+    """Fetch ALL Kalshi events across all categories (cached 15 min)."""
+    if time.time() - _kalshi_all_cache['ts'] < 900 and _kalshi_all_cache['data']:
+        return _kalshi_all_cache['data']
+    base = 'https://api.elections.kalshi.com/trade-api/v2'
+    events = []
+    cursor = ''
+    for _ in range(12):
+        url = f"{base}/events?limit=100&status=open" + (f"&cursor={cursor}" if cursor else '')
+        data = _json_get(url)
+        batch = data.get('events', [])
+        events.extend(batch)
+        cursor = data.get('cursor', '')
+        if not cursor or not batch:
+            break
+    _kalshi_all_cache['data'] = events
+    _kalshi_all_cache['ts'] = time.time()
     return markets
 
 def fetch_polymarket(comp1, comp2, sport):
@@ -877,6 +898,76 @@ def fetch_kalshi(comp1, comp2, sport):
             })
 
     return sorted(results, key=lambda x: -x['volume24h'])[:3]
+
+
+@app.route('/api/search')
+def api_search():
+    """General prediction market search across all Polymarket + Kalshi categories."""
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    q = request.args.get('q', '').strip().lower()
+    if len(q) < 2:
+        return jsonify({'results': []})
+
+    import re
+    def text_matches(text):
+        t = text.lower()
+        if len(q) >= 4:
+            return q in t
+        return bool(re.search(r'\b' + re.escape(q) + r'\b', t))
+
+    def _guess_category(question):
+        ql = question.lower()
+        if any(w in ql for w in ['bitcoin','crypto','eth','solana','btc','coinbase','blockchain']): return 'Crypto'
+        if any(w in ql for w in ['trump','biden','election','president','congress','senate','democrat','republican']): return 'Politics'
+        if any(w in ql for w in ['fed','interest rate','inflation','gdp','recession','economy','stock']): return 'Economics'
+        if any(w in ql for w in ['ai','openai','gpt','anthropic','llm','artificial intelligence']): return 'AI & Tech'
+        if any(w in ql for w in ['grammy','oscar','emmy','netflix','spotify','album','movie','taylor','beyonce']): return 'Entertainment'
+        if any(w in ql for w in ['win','beat','champion','cup','bowl','match','game','nba','nfl','mlb']): return 'Sports'
+        if any(w in ql for w in ['war','conflict','nato','ukraine','russia','israel','china']): return 'Geopolitics'
+        return 'Other'
+
+    results = []
+
+    for mkt in _get_all_poly_markets():
+        question = mkt.get('question', '')
+        if not text_matches(question): continue
+        results.append({
+            'source':   'Polymarket',
+            'question': question,
+            'prices':   _parse_poly_prices(mkt),
+            'volume24h': float(mkt.get('volume24hr') or 0),
+            'url':      f"https://polymarket.com/event/{mkt.get('slug','')}",
+            'category': _guess_category(question),
+            'active':   True,
+        })
+
+    base = 'https://api.elections.kalshi.com/trade-api/v2'
+    for event in _get_all_kalshi_events():
+        title = event.get('title', '')
+        if not text_matches(title): continue
+        et  = event.get('event_ticker', '')
+        cat = event.get('category', '')
+        mkt_data = _json_get(f"{base}/events/{et}")
+        for mkt in mkt_data.get('markets', [])[:2]:
+            yes_price = float(mkt.get('last_price_dollars') or mkt.get('yes_bid_dollars') or 0) * 100
+            ticker = mkt.get('ticker', '')
+            results.append({
+                'source':   'Kalshi',
+                'question': mkt.get('title', title),
+                'prices':   [('Yes', round(yes_price,1)), ('No', round(100-yes_price,1))],
+                'volume24h': float(mkt.get('volume_24h_fp') or 0) / 100,
+                'url':      f"https://kalshi.com/markets/{et.split('-')[0].lower()}/{ticker}",
+                'category': cat,
+                'active':   mkt.get('status') in ('open','active'),
+            })
+
+    seen, deduped = set(), []
+    for r in sorted(results, key=lambda x: -x['volume24h']):
+        if r['question'] not in seen:
+            seen.add(r['question'])
+            deduped.append(r)
+    return jsonify({'results': deduped[:20], 'total': len(deduped)})
 
 @app.route('/api/markets')
 def api_markets():

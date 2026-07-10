@@ -36,6 +36,12 @@
     <button class="disclaimer-close" onclick="dismissDisclaimer()">Got it</button>
   </div>
 
+  <!-- Mode tabs -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabPredict" onclick="switchMode('predict')">🤖 Predict</button>
+    <button class="mode-tab" id="tabSearch" onclick="switchMode('search')">📈 Market Search</button>
+  </div>
+
   <div id="formSection">
     <p class="tagline">AI-powered win probability for any sport</p>
 
@@ -110,6 +116,23 @@
     <div class="section-below" id="eventsSection" style="display:none">
       <div class="below-label">📅 Upcoming matchups</div>
       <div class="events-grid" id="eventsGrid"></div>
+    </div>
+  </div>
+
+  <!-- Market Search mode -->
+  <div id="searchSection" style="display:none">
+    <p class="tagline">Search any topic across Polymarket &amp; Kalshi</p>
+    <div class="market-search-bar">
+      <input type="text" id="marketSearchInput" placeholder="Bitcoin, Trump, Taylor Swift, Fed rates…"
+             autocomplete="off" oninput="onSearchInput(this.value)">
+      <button class="btn-market-search" onclick="runMarketSearch()">Search</button>
+    </div>
+    <div id="searchResults" class="search-results-wrap" style="display:none">
+      <div class="search-results-header">
+        <span id="searchResultCount" class="search-result-count"></span>
+        <span id="searchResultsLoading" style="display:none;color:var(--muted);font-size:0.8rem;">Searching…</span>
+      </div>
+      <div id="searchResultsList"></div>
     </div>
   </div>
 

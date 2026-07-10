@@ -352,6 +352,90 @@ function copyResult() {
   });
 }
 
+// ── Mode switching ────────────────────────────────
+
+function switchMode(mode) {
+  const predict = document.getElementById('formSection');
+  const search  = document.getElementById('searchSection');
+  const result  = document.getElementById('resultSection');
+  const loading = document.getElementById('loadingSection');
+  document.getElementById('tabPredict').classList.toggle('active', mode === 'predict');
+  document.getElementById('tabSearch').classList.toggle('active', mode === 'search');
+  if (mode === 'predict') {
+    predict.style.display = ''; search.style.display = 'none';
+    result.style.display = 'none'; loading.style.display = 'none';
+  } else {
+    predict.style.display = 'none'; search.style.display = '';
+    result.style.display = 'none'; loading.style.display = 'none';
+    document.getElementById('marketSearchInput').focus();
+  }
+}
+
+// ── Market Search ─────────────────────────────────
+
+let searchTimer = null;
+
+function onSearchInput(val) {
+  clearTimeout(searchTimer);
+  if (val.length < 2) return;
+  searchTimer = setTimeout(() => runMarketSearch(), 500);
+}
+
+async function runMarketSearch() {
+  const q = document.getElementById('marketSearchInput').value.trim();
+  if (q.length < 2) return;
+
+  const resultsWrap = document.getElementById('searchResults');
+  const list        = document.getElementById('searchResultsList');
+  const countEl     = document.getElementById('searchResultCount');
+  const loadingEl   = document.getElementById('searchResultsLoading');
+
+  resultsWrap.style.display = 'block';
+  loadingEl.style.display   = 'inline';
+  list.innerHTML = '';
+  countEl.textContent = '';
+
+  try {
+    const res  = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    loadingEl.style.display = 'none';
+
+    if (!data.results || !data.results.length) {
+      list.innerHTML = '<div class="search-empty">No markets found for "' + q + '"</div>';
+      return;
+    }
+
+    countEl.textContent = `${data.total} market${data.total !== 1 ? 's' : ''} found`;
+    list.innerHTML = '';
+
+    data.results.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'search-result-card';
+
+      const pricesHtml = r.prices.slice(0,4).map(([outcome, pct]) =>
+        `<span class="search-outcome"><span class="search-outcome-name">${outcome}</span><span class="search-outcome-pct">${pct}%</span></span>`
+      ).join('');
+
+      card.innerHTML = `
+        <div class="search-result-top">
+          <div class="search-badges">
+            <span class="market-source-badge ${r.source==='Polymarket'?'badge-poly':'badge-kalshi'}">${r.source}</span>
+            <span class="search-cat-badge">${r.category}</span>
+          </div>
+          <a href="${r.url}" target="_blank" class="market-link">Trade →</a>
+        </div>
+        <div class="search-question">${r.question}</div>
+        <div class="search-prices">${pricesHtml}</div>
+        <div class="search-vol">24h volume: $${r.volume24h.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+      `;
+      list.appendChild(card);
+    });
+  } catch (_) {
+    loadingEl.style.display = 'none';
+    list.innerHTML = '<div class="search-empty">Something went wrong. Try again.</div>';
+  }
+}
+
 // ── Parlay Slip ───────────────────────────────────
 
 let slip = [];   // [{sport, comp1, comp2, winner, pct, label}]
