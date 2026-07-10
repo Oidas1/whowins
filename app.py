@@ -691,21 +691,35 @@ def _parse_poly_prices(mkt):
 
 _SPORT_KEYWORDS = {'win','beat','advance','champion','title','cup','bowl','match','game',
                    'fight','score','points','goals','playoff','final','series','season',
-                   'league','tournament','medal','race','round','bout','vs','versus'}
+                   'league','tournament','medal','race','round','bout','vs','versus',
+                   'set','tennis','atp','wta','ufc','mma','nba','nfl','mlb','nhl'}
+
+_POLITICAL_KEYWORDS = {'election','president','senator','congress','minister','governor',
+                       'nomination','ballot','vote','polling','candidate','political',
+                       'parliament','mayor','republican','democrat','primary','caucus',
+                       'secretary','ambassador','administration','legislation','bill '}
+
+# Individual sports where both names should appear together
+_INDIVIDUAL_SPORTS = {'tennis','boxing','mma','ufc','golf','wrestling','athletics',
+                      'swimming','cycling','skiing','gymnastics','atp','wta'}
 
 def _name_matches(text, name):
     """Check if a competitor name appears in text — requires meaningful word match."""
     text = text.lower()
-    # Use words longer than 3 chars to avoid false positives on short words like 'los'
     parts = [p for p in name.lower().split() if len(p) > 3]
     if not parts:
         parts = [p for p in name.lower().split() if len(p) > 2]
     return any(p in text for p in parts)
 
 def _is_sport_market(question):
-    """Check if a Polymarket question is sports-related."""
+    """Check if a Polymarket question is sports-related and not political."""
     q = question.lower()
+    if any(kw in q for kw in _POLITICAL_KEYWORDS):
+        return False
     return any(kw in q for kw in _SPORT_KEYWORDS)
+
+def _is_individual_sport(sport):
+    return any(s in sport.lower() for s in _INDIVIDUAL_SPORTS)
 
 _poly_cache = {'data': [], 'ts': 0}
 
@@ -729,6 +743,7 @@ def fetch_polymarket(comp1, comp2, sport):
     all_markets = _get_all_poly_markets()
     results = []
     seen = set()
+    individual = _is_individual_sport(sport)
 
     for mkt in all_markets:
         q = mkt.get('question', '')
@@ -736,7 +751,13 @@ def fetch_polymarket(comp1, comp2, sport):
         q_lower = q.lower()
         mentions_a = _name_matches(q_lower, comp1)
         mentions_b = _name_matches(q_lower, comp2)
-        if not (mentions_a or mentions_b): continue
+
+        # For individual sports (tennis, boxing, etc.) require BOTH names
+        if individual:
+            if not (mentions_a and mentions_b): continue
+        else:
+            if not (mentions_a or mentions_b): continue
+
         if not _is_sport_market(q): continue
         seen.add(q)
 
