@@ -17,7 +17,17 @@ window.addEventListener('DOMContentLoaded', () => {
   loadAccuracy();
   loadTrending();
   loadEvents();
+  if (localStorage.getItem('ww_disclaimer') === 'dismissed') {
+    const b = document.getElementById('disclaimerBanner');
+    if (b) b.style.display = 'none';
+  }
 });
+
+function dismissDisclaimer() {
+  localStorage.setItem('ww_disclaimer', 'dismissed');
+  const b = document.getElementById('disclaimerBanner');
+  if (b) { b.style.opacity = '0'; b.style.transform = 'translateY(-8px)'; setTimeout(() => b.style.display = 'none', 300); }
+}
 
 // ── Form ──────────────────────────────────────────
 

@@ -514,6 +514,46 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   color: var(--text);
 }
 
+/* ── Disclaimer banner ───────────────────────────── */
+.disclaimer-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(240,180,41,0.08);
+  border: 1px solid rgba(240,180,41,0.25);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.disclaimer-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+
+.disclaimer-body {
+  flex: 1;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.disclaimer-body strong { color: var(--accent); font-weight: 700; }
+
+.disclaimer-close {
+  background: transparent;
+  border: 1px solid rgba(240,180,41,0.3);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  font-family: inherit;
+}
+.disclaimer-close:hover { background: rgba(240,180,41,0.1); }
+
 /* ── How it works ────────────────────────────────── */
 .how-it-works {
   background: var(--surface);
