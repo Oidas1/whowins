@@ -72,8 +72,11 @@ document.getElementById('matchupForm').addEventListener('submit', async (e) => {
     resultData = parse(fullText);
     render(resultData);
 
-    // Fetch odds in parallel with saving
-    const oddsData = await loadOdds(currentSport, currentComp1, currentComp2);
+    // Fetch odds + prediction markets in parallel
+    const [oddsData] = await Promise.all([
+      loadOdds(currentSport, currentComp1, currentComp2),
+      loadMarkets(currentSport, currentComp1, currentComp2, resultData.aPct, resultData.bPct),
+    ]);
     if (oddsData && oddsData.found) {
       renderOdds(oddsData, resultData);
     }
@@ -337,6 +340,78 @@ function copyResult() {
     msg.classList.add('show');
     setTimeout(() => msg.classList.remove('show'), 2000);
   });
+}
+
+// ── Prediction Markets ────────────────────────────
+
+async function loadMarkets(sport, comp1, comp2, aiA, aiB) {
+  try {
+    const params = new URLSearchParams({ sport, comp1, comp2, ai_a: aiA, ai_b: aiB });
+    const res = await fetch('/api/markets?' + params);
+    const data = await res.json();
+    if (data.markets && data.markets.length > 0) {
+      renderMarkets(data, comp1, comp2, aiA, aiB);
+    } else {
+      document.getElementById('marketsSection').style.display = 'none';
+    }
+  } catch (_) {}
+}
+
+function renderMarkets(data, comp1, comp2, aiA, aiB) {
+  const section = document.getElementById('marketsSection');
+  const list    = document.getElementById('marketsList');
+  const sub     = document.getElementById('marketsSub');
+  const hasLive = data.has_live;
+
+  sub.textContent = hasLive ? '🔴 Live markets found' : `${data.markets.length} market${data.markets.length > 1 ? 's' : ''} found`;
+  if (hasLive) sub.classList.add('markets-live');
+
+  list.innerHTML = '';
+  data.markets.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'market-card' + (m.live ? ' market-live' : '');
+
+    const aGap = m.a_gap ?? null;
+    const bGap = m.b_gap ?? null;
+    const dipA = m.dip_a;
+    const dipB = m.dip_b;
+
+    const aRow = m.a_price != null ? `
+      <div class="market-row ${dipA ? 'market-dip' : ''}">
+        <span class="market-name">${comp1}</span>
+        <div class="market-prices">
+          <span class="market-ai">AI ${aiA}%</span>
+          <span class="market-sep">→</span>
+          <span class="market-mkt">${m.source} ${m.a_price}%</span>
+          ${aGap != null ? `<span class="market-gap ${aGap > 0 ? 'gap-pos' : 'gap-neg'}">${aGap > 0 ? '+' : ''}${aGap}</span>` : ''}
+        </div>
+        ${dipA ? '<span class="dip-badge">🔥 BUY THE DIP</span>' : ''}
+      </div>` : '';
+
+    const bRow = m.b_price != null ? `
+      <div class="market-row ${dipB ? 'market-dip' : ''}">
+        <span class="market-name">${comp2}</span>
+        <div class="market-prices">
+          <span class="market-ai">AI ${aiB}%</span>
+          <span class="market-sep">→</span>
+          <span class="market-mkt">${m.source} ${m.b_price}%</span>
+          ${bGap != null ? `<span class="market-gap ${bGap > 0 ? 'gap-pos' : 'gap-neg'}">${bGap > 0 ? '+' : ''}${bGap}</span>` : ''}
+        </div>
+        ${dipB ? '<span class="dip-badge">🔥 BUY THE DIP</span>' : ''}
+      </div>` : '';
+
+    card.innerHTML = `
+      <div class="market-card-top">
+        <span class="market-source-badge ${m.source === 'Polymarket' ? 'badge-poly' : 'badge-kalshi'}">${m.source}</span>
+        <span class="market-q">${m.question}</span>
+        <a href="${m.url}" target="_blank" class="market-link">Trade →</a>
+      </div>
+      ${aRow}${bRow}
+    `;
+    list.appendChild(card);
+  });
+
+  section.style.display = 'block';
 }
 
 // ── Odds ──────────────────────────────────────────

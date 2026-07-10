@@ -61,14 +61,14 @@
           <input type="text" id="sport" placeholder="e.g. NBA, FIFA World Cup, Boxing, NFL…"
                  required autocapitalize="words" list="sportSuggestions" autocomplete="off">
           <datalist id="sportSuggestions">
-            <option value="NBA"><option value="NFL"><option value="MLB">
-            <option value="NHL"><option value="MMA"><option value="UFC">
-            <option value="Boxing"><option value="FIFA World Cup"><option value="EPL">
-            <option value="La Liga"><option value="MLS"><option value="Bundesliga">
-            <option value="Tennis"><option value="Golf"><option value="WNBA">
-            <option value="College Football"><option value="College Basketball">
-            <option value="Copa Libertadores"><option value="NFL Preseason">
-            <option value="Serie A"><option value="Ligue 1">
+            <option value="NBA"></option><option value="NFL"></option><option value="MLB"></option>
+            <option value="NHL"></option><option value="MMA"></option><option value="UFC"></option>
+            <option value="Boxing"></option><option value="FIFA World Cup"></option><option value="EPL"></option>
+            <option value="La Liga"></option><option value="MLS"></option><option value="Bundesliga"></option>
+            <option value="Tennis"></option><option value="Golf"></option><option value="WNBA"></option>
+            <option value="College Football"></option><option value="College Basketball"></option>
+            <option value="Copa Libertadores"></option><option value="NFL Preseason"></option>
+            <option value="Serie A"></option><option value="Ligue 1"></option>
           </datalist>
         </div>
         <div class="vs-row">
@@ -147,6 +147,15 @@
         <span class="conf-badge-big" id="confBadge"></span>
       </div>
       <p class="reason-text" id="reasonText" style="display:none"></p>
+    </div>
+
+    <!-- Prediction Markets -->
+    <div id="marketsSection" style="display:none">
+      <div class="markets-header">
+        <span class="markets-title">📈 Prediction Markets</span>
+        <span class="markets-sub" id="marketsSub"></span>
+      </div>
+      <div id="marketsList"></div>
     </div>
 
     <div class="result-actions">

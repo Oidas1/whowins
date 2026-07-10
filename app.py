@@ -605,6 +605,149 @@ def build_prompt(sport, comp1, comp2, context):
         context_block=context_block
     )
 
+# ── Prediction Markets ────────────────────────────────────────────────────────
+
+KALSHI_API_KEY = os.environ.get('KALSHI_API_KEY', '')
+
+def _json_get(url, headers=None):
+    try:
+        h = {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}
+        if headers: h.update(headers)
+        req = urllib.request.Request(url, headers=h)
+        return json.loads(urllib.request.urlopen(req, timeout=8).read())
+    except Exception:
+        return {}
+
+def _parse_poly_prices(mkt):
+    rp = mkt.get('outcomePrices', '[]')
+    ro = mkt.get('outcomes', '[]')
+    if isinstance(rp, str): rp = json.loads(rp)
+    if isinstance(ro, str): ro = json.loads(ro)
+    return [(o, round(float(p) * 100, 1)) for o, p in zip(ro, rp)]
+
+def _name_matches(text, name):
+    """Check if a competitor name (or last name) appears in text."""
+    text = text.lower()
+    parts = [p for p in name.lower().split() if len(p) > 2]
+    return any(p in text for p in parts)
+
+def fetch_polymarket(comp1, comp2, sport):
+    """Search Polymarket for markets related to this matchup."""
+    results = []
+    seen = set()
+    queries = [comp1, comp2, f"{sport} {comp1}"]
+
+    for query in queries:
+        url = f"https://gamma-api.polymarket.com/markets?q={urllib.parse.quote(query)}&limit=20&active=true&closed=false"
+        data = _json_get(url)
+        if not isinstance(data, list): continue
+        for mkt in data:
+            q = mkt.get('question', '')
+            if q in seen: continue
+            # Must mention at least one competitor
+            if not (_name_matches(q, comp1) or _name_matches(q, comp2)): continue
+            seen.add(q)
+            prices = _parse_poly_prices(mkt)
+            # Find which outcome matches each competitor
+            a_price = next((p for o, p in prices if _name_matches(o, comp1)), None)
+            b_price = next((p for o, p in prices if _name_matches(o, comp2)), None)
+            # Fallback: use Yes/No structure
+            if a_price is None and len(prices) == 2:
+                if _name_matches(q, comp1) and 'win' in q.lower():
+                    a_price = prices[0][1]
+                    b_price = round(100 - a_price, 1)
+                elif _name_matches(q, comp2) and 'win' in q.lower():
+                    b_price = prices[0][1]
+                    a_price = round(100 - b_price, 1)
+            if a_price is None and b_price is None: continue
+            results.append({
+                'source': 'Polymarket',
+                'question': q,
+                'a_price': a_price,
+                'b_price': b_price,
+                'volume24h': float(mkt.get('volume24hr') or 0),
+                'url': f"https://polymarket.com/event/{mkt.get('slug','')}",
+                'active': True,
+                'live': '(In-Game' in q or 'Live' in q,
+            })
+    return sorted(results, key=lambda x: -x['volume24h'])[:3]
+
+def fetch_kalshi(comp1, comp2, sport):
+    """Search Kalshi markets — uses user's API key if set, else demo."""
+    base = 'https://demo-api.kalshi.co/trade-api/v2'
+    auth_headers = {}
+    if KALSHI_API_KEY:
+        base = 'https://trading-api.kalshi.com/trade-api/v2'
+        auth_headers = {'Authorization': f'Token {KALSHI_API_KEY}'}
+
+    results = []
+    seen = set()
+
+    # Search markets with keyword
+    for query in [comp1, comp2, sport]:
+        url = f"{base}/markets?limit=30&status=open&search={urllib.parse.quote(query)}"
+        data = _json_get(url, auth_headers)
+        for mkt in data.get('markets', []):
+            title = mkt.get('title', '') + ' ' + mkt.get('yes_sub_title', '')
+            if title in seen: continue
+            if not (_name_matches(title, comp1) or _name_matches(title, comp2)): continue
+            seen.add(title)
+            yes_price = float(mkt.get('last_price_dollars') or mkt.get('yes_bid_dollars') or 0) * 100
+            ticker = mkt.get('ticker', '')
+            # Determine which side this is
+            a_price, b_price = None, None
+            if _name_matches(title, comp1) and 'win' in title.lower():
+                a_price = round(yes_price, 1)
+                b_price = round(100 - yes_price, 1)
+            elif _name_matches(title, comp2) and 'win' in title.lower():
+                b_price = round(yes_price, 1)
+                a_price = round(100 - yes_price, 1)
+            elif _name_matches(title, comp1):
+                a_price = round(yes_price, 1)
+            if a_price is None and b_price is None: continue
+            results.append({
+                'source': 'Kalshi',
+                'question': mkt.get('title', ticker),
+                'a_price': a_price,
+                'b_price': b_price,
+                'volume24h': float(mkt.get('volume_24h_fp') or 0) / 100,
+                'url': f"https://kalshi.com/markets/{ticker.split('-')[0].lower()}/{ticker}",
+                'active': mkt.get('status') == 'open',
+                'live': 'live' in title.lower() or 'in-game' in title.lower(),
+            })
+    return sorted(results, key=lambda x: -x['volume24h'])[:3]
+
+@app.route('/api/markets')
+def api_markets():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    comp1 = request.args.get('comp1', '')
+    comp2 = request.args.get('comp2', '')
+    sport = request.args.get('sport', '')
+    ai_a  = float(request.args.get('ai_a', 50))
+    ai_b  = float(request.args.get('ai_b', 50))
+
+    poly = fetch_polymarket(comp1, comp2, sport)
+    kalshi = fetch_kalshi(comp1, comp2, sport)
+    all_markets = poly + kalshi
+
+    # Calculate value gap for each market
+    for m in all_markets:
+        if m['a_price'] is not None:
+            m['a_gap'] = round(ai_a - m['a_price'], 1)
+        if m['b_price'] is not None:
+            m['b_gap'] = round(ai_b - m['b_price'], 1)
+        # Flag as dip opportunity: AI significantly higher than market
+        m['dip_a'] = m.get('a_gap', 0) >= 10
+        m['dip_b'] = m.get('b_gap', 0) >= 10
+
+    return jsonify({
+        'markets': all_markets,
+        'has_live': any(m['live'] for m in all_markets),
+        'comp1': comp1,
+        'comp2': comp2,
+    })
+
 # ── Odds API ──────────────────────────────────────────────────────────────────
 
 SPORT_KEY_MAP = {
