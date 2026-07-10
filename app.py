@@ -673,47 +673,45 @@ def fetch_polymarket(comp1, comp2, sport):
     return sorted(results, key=lambda x: -x['volume24h'])[:3]
 
 def fetch_kalshi(comp1, comp2, sport):
-    """Search Kalshi markets — uses user's API key if set, else demo."""
-    base = 'https://demo-api.kalshi.co/trade-api/v2'
-    auth_headers = {}
-    if KALSHI_API_KEY:
-        base = 'https://trading-api.kalshi.com/trade-api/v2'
-        auth_headers = {'Authorization': f'Token {KALSHI_API_KEY}'}
-
+    """Search Kalshi markets using public endpoints (no auth needed for prices)."""
+    # Kalshi moved to api.elections.kalshi.com; public market browsing needs no auth
+    base = 'https://api.elections.kalshi.com/trade-api/v2'
     results = []
     seen = set()
 
-    # Search markets with keyword
     for query in [comp1, comp2, sport]:
-        url = f"{base}/markets?limit=30&status=open&search={urllib.parse.quote(query)}"
-        data = _json_get(url, auth_headers)
+        url = f"{base}/markets?limit=50&status=open"
+        data = _json_get(url)
         for mkt in data.get('markets', []):
-            title = mkt.get('title', '') + ' ' + mkt.get('yes_sub_title', '')
+            title = (mkt.get('title') or '') + ' ' + (mkt.get('yes_sub_title') or '')
+            full_text = title.lower()
             if title in seen: continue
-            if not (_name_matches(title, comp1) or _name_matches(title, comp2)): continue
+            if not (_name_matches(full_text, comp1) or _name_matches(full_text, comp2)):
+                continue
             seen.add(title)
             yes_price = float(mkt.get('last_price_dollars') or mkt.get('yes_bid_dollars') or 0) * 100
+            if yes_price == 0:
+                yes_price = float(mkt.get('yes_ask_dollars') or 0) * 100
             ticker = mkt.get('ticker', '')
-            # Determine which side this is
             a_price, b_price = None, None
-            if _name_matches(title, comp1) and 'win' in title.lower():
+            if _name_matches(full_text, comp1):
                 a_price = round(yes_price, 1)
                 b_price = round(100 - yes_price, 1)
-            elif _name_matches(title, comp2) and 'win' in title.lower():
+            elif _name_matches(full_text, comp2):
                 b_price = round(yes_price, 1)
                 a_price = round(100 - yes_price, 1)
-            elif _name_matches(title, comp1):
-                a_price = round(yes_price, 1)
-            if a_price is None and b_price is None: continue
+            if a_price is None and b_price is None:
+                continue
+            series = ticker.split('-')[0].lower() if ticker else ''
             results.append({
                 'source': 'Kalshi',
                 'question': mkt.get('title', ticker),
                 'a_price': a_price,
                 'b_price': b_price,
                 'volume24h': float(mkt.get('volume_24h_fp') or 0) / 100,
-                'url': f"https://kalshi.com/markets/{ticker.split('-')[0].lower()}/{ticker}",
+                'url': f"https://kalshi.com/markets/{series}/{ticker}",
                 'active': mkt.get('status') == 'open',
-                'live': 'live' in title.lower() or 'in-game' in title.lower(),
+                'live': 'live' in full_text or 'in-game' in full_text,
             })
     return sorted(results, key=lambda x: -x['volume24h'])[:3]
 
