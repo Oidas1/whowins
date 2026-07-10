@@ -708,59 +708,86 @@ def fetch_polymarket(comp1, comp2, sport):
 
     return sorted(results, key=lambda x: -x['volume24h'])[:4]
 
-_kalshi_cache = {'data': [], 'ts': 0}
-
-def _get_all_kalshi_events():
-    """Fetch Kalshi events (cleaner structure than markets). Cached 10 min."""
-    if time.time() - _kalshi_cache['ts'] < 600 and _kalshi_cache['data']:
-        return _kalshi_cache['data']
-    base = 'https://api.elections.kalshi.com/trade-api/v2'
-    events = []
-    for cat in ['sports', '']:
-        url = f"{base}/events?limit=100&status=open" + (f"&category={cat}" if cat else "")
-        data = _json_get(url)
-        events.extend(data.get('events', []))
-    _kalshi_cache['data'] = events
-    _kalshi_cache['ts'] = time.time()
-    return events
+KALSHI_SPORT_SERIES = {
+    'nba':           ['KXWNBAGAME'],
+    'basketball':    ['KXWNBAGAME'],
+    'wnba':          ['KXWNBASPREAD'],
+    'nfl':           ['KXWNFLGAME'],
+    'football':      ['KXWNFLGAME'],
+    'mlb':           ['KXMLBF3', 'KXMLBF5TOTAL'],
+    'baseball':      ['KXMLBF3', 'KXMLBF5TOTAL'],
+    'mls':           ['KXMLSGAME'],
+    'soccer':        ['KXMLSGAME', 'KXWCGAME', 'KXWCADVANCE'],
+    'world cup':     ['KXWCGAME', 'KXWCADVANCE'],
+    'fifa world cup':['KXWCGAME', 'KXWCADVANCE'],
+    'tennis':        ['KXATPMATCH', 'KXATPSETWINNER'],
+    'atp':           ['KXATPMATCH'],
+    'wta':           ['KXWTATOURNWIN'],
+    'cricket':       ['KXODIMATCH'],
+    'boxing':        ['KXWBCBANTAMWEIGHTTITLE', 'KXWBCFLYWEIGHTTITLE', 'KXWBCMIDDLEWEIGHTTITLE'],
+    'nwsl':          ['KXNWSLGAME'],
+    'mma':           ['KXWNBAGAME'],  # no MMA series active right now
+    'nascar':        ['KXNASCARRACE'],
+    'f1':            ['KXF1RACEPODIUM'],
+}
 
 def fetch_kalshi(comp1, comp2, sport):
-    """Scan Kalshi events for markets matching this matchup."""
+    """Fetch Kalshi markets using sport-specific series for clean game-level data."""
     base = 'https://api.elections.kalshi.com/trade-api/v2'
+    sport_key = sport.lower().strip()
+    # Find best matching series list
+    series_list = KALSHI_SPORT_SERIES.get(sport_key)
+    if not series_list:
+        for k, v in KALSHI_SPORT_SERIES.items():
+            if k in sport_key or sport_key in k:
+                series_list = v
+                break
+    if not series_list:
+        series_list = ['KXWCGAME', 'KXWNBAGAME', 'KXMLSGAME', 'KXATPMATCH', 'KXMLBF3']
+
     results = []
     seen = set()
 
-    # Try events first (cleaner titles)
-    events = _get_all_kalshi_events()
-    for event in events:
-        title = event.get('title', '')
-        t_lower = title.lower()
-        if not (_name_matches(t_lower, comp1) or _name_matches(t_lower, comp2)):
-            continue
-        # Fetch individual markets within this event
-        et = event.get('event_ticker', '')
-        mkts = _json_get(f"{base}/events/{et}").get('markets', [])
-        for mkt in mkts:
-            mt = mkt.get('title', '') + ' ' + mkt.get('yes_sub_title', '')
-            if mt in seen: continue
-            seen.add(mt)
+    for series in series_list:
+        data = _json_get(f"{base}/markets?series_ticker={series}&limit=50&status=open")
+        if not data.get('markets'):
+            data = _json_get(f"{base}/markets?series_ticker={series}&limit=50&status=active")
+        for mkt in data.get('markets', []):
+            title = mkt.get('title', '')
+            t_lower = title.lower()
+            if title in seen: continue
+            if not (_name_matches(t_lower, comp1) or _name_matches(t_lower, comp2)): continue
+            seen.add(title)
+
             yes_price = float(mkt.get('last_price_dollars') or mkt.get('yes_bid_dollars') or mkt.get('yes_ask_dollars') or 0) * 100
             ticker = mkt.get('ticker', '')
+
+            # Parse which competitor the YES side refers to
             a_price, b_price = None, None
-            if _name_matches(t_lower, comp1):
-                a_price = round(yes_price, 1); b_price = round(100 - yes_price, 1)
-            elif _name_matches(t_lower, comp2):
-                b_price = round(yes_price, 1); a_price = round(100 - yes_price, 1)
-            if a_price is None: continue
-            series = et.split('-')[0].lower() if et else ''
+            mentions_a = _name_matches(t_lower, comp1)
+            mentions_b = _name_matches(t_lower, comp2)
+
+            if mentions_a and mentions_b:
+                # "A vs B Winner?" — YES = A wins
+                a_price = round(yes_price, 1)
+                b_price = round(100 - yes_price, 1)
+            elif mentions_a:
+                a_price = round(yes_price, 1)
+                b_price = round(100 - yes_price, 1)
+            elif mentions_b:
+                b_price = round(yes_price, 1)
+                a_price = round(100 - yes_price, 1)
+            else:
+                continue
+
             results.append({
                 'source': 'Kalshi',
                 'question': title,
                 'a_price': a_price,
                 'b_price': b_price,
                 'volume24h': float(mkt.get('volume_24h_fp') or 0) / 100,
-                'url': f"https://kalshi.com/markets/{series}/{ticker}",
-                'active': True,
+                'url': f"https://kalshi.com/markets/{series.lower()}/{ticker}",
+                'active': mkt.get('status') in ('open', 'active'),
                 'live': 'live' in t_lower or 'in-game' in t_lower,
             })
 
