@@ -625,94 +625,145 @@ def _parse_poly_prices(mkt):
     if isinstance(ro, str): ro = json.loads(ro)
     return [(o, round(float(p) * 100, 1)) for o, p in zip(ro, rp)]
 
+_SPORT_KEYWORDS = {'win','beat','advance','champion','title','cup','bowl','match','game',
+                   'fight','score','points','goals','playoff','final','series','season',
+                   'league','tournament','medal','race','round','bout','vs','versus'}
+
 def _name_matches(text, name):
-    """Check if a competitor name (or last name) appears in text."""
+    """Check if a competitor name appears in text — requires meaningful word match."""
     text = text.lower()
-    parts = [p for p in name.lower().split() if len(p) > 2]
+    # Use words longer than 3 chars to avoid false positives on short words like 'los'
+    parts = [p for p in name.lower().split() if len(p) > 3]
+    if not parts:
+        parts = [p for p in name.lower().split() if len(p) > 2]
     return any(p in text for p in parts)
 
+def _is_sport_market(question):
+    """Check if a Polymarket question is sports-related."""
+    q = question.lower()
+    return any(kw in q for kw in _SPORT_KEYWORDS)
+
+_poly_cache = {'data': [], 'ts': 0}
+
+def _get_all_poly_markets():
+    """Fetch all active Polymarket sports markets (cached 10 min)."""
+    if time.time() - _poly_cache['ts'] < 600 and _poly_cache['data']:
+        return _poly_cache['data']
+    markets = []
+    for offset in [0, 100, 200]:
+        data = _json_get(f"https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=100&offset={offset}")
+        if isinstance(data, list):
+            markets.extend(data)
+        else:
+            break
+    _poly_cache['data'] = markets
+    _poly_cache['ts'] = time.time()
+    return markets
+
 def fetch_polymarket(comp1, comp2, sport):
-    """Search Polymarket for markets related to this matchup."""
+    """Scan all active Polymarket markets and return ones matching this matchup."""
+    all_markets = _get_all_poly_markets()
     results = []
     seen = set()
-    queries = [comp1, comp2, f"{sport} {comp1}"]
 
-    for query in queries:
-        url = f"https://gamma-api.polymarket.com/markets?q={urllib.parse.quote(query)}&limit=20&active=true&closed=false"
+    for mkt in all_markets:
+        q = mkt.get('question', '')
+        if q in seen: continue
+        q_lower = q.lower()
+        mentions_a = _name_matches(q_lower, comp1)
+        mentions_b = _name_matches(q_lower, comp2)
+        if not (mentions_a or mentions_b): continue
+        if not _is_sport_market(q): continue
+        seen.add(q)
+
+        prices = _parse_poly_prices(mkt)
+        a_price, b_price = None, None
+
+        # Check if outcomes are named (e.g. ["Spain","Germany"])
+        a_price = next((p for o, p in prices if _name_matches(o.lower(), comp1)), None)
+        b_price = next((p for o, p in prices if _name_matches(o.lower(), comp2)), None)
+
+        # Yes/No market — assign based on which competitor the question is about
+        if a_price is None and b_price is None and len(prices) == 2:
+            yes_p = prices[0][1]
+            if mentions_a and ('win' in q_lower or 'advance' in q_lower or 'champion' in q_lower):
+                a_price = yes_p
+                b_price = round(100 - yes_p, 1)
+            elif mentions_b and ('win' in q_lower or 'advance' in q_lower or 'champion' in q_lower):
+                b_price = yes_p
+                a_price = round(100 - yes_p, 1)
+
+        if a_price is None and b_price is None: continue
+
+        results.append({
+            'source': 'Polymarket',
+            'question': q,
+            'a_price': a_price,
+            'b_price': b_price,
+            'volume24h': float(mkt.get('volume24hr') or 0),
+            'url': f"https://polymarket.com/event/{mkt.get('slug', '')}",
+            'active': True,
+            'live': 'in-game' in q_lower or 'live' in q_lower,
+        })
+
+    return sorted(results, key=lambda x: -x['volume24h'])[:4]
+
+_kalshi_cache = {'data': [], 'ts': 0}
+
+def _get_all_kalshi_events():
+    """Fetch Kalshi events (cleaner structure than markets). Cached 10 min."""
+    if time.time() - _kalshi_cache['ts'] < 600 and _kalshi_cache['data']:
+        return _kalshi_cache['data']
+    base = 'https://api.elections.kalshi.com/trade-api/v2'
+    events = []
+    for cat in ['sports', '']:
+        url = f"{base}/events?limit=100&status=open" + (f"&category={cat}" if cat else "")
         data = _json_get(url)
-        if not isinstance(data, list): continue
-        for mkt in data:
-            q = mkt.get('question', '')
-            if q in seen: continue
-            # Must mention at least one competitor
-            if not (_name_matches(q, comp1) or _name_matches(q, comp2)): continue
-            seen.add(q)
-            prices = _parse_poly_prices(mkt)
-            # Find which outcome matches each competitor
-            a_price = next((p for o, p in prices if _name_matches(o, comp1)), None)
-            b_price = next((p for o, p in prices if _name_matches(o, comp2)), None)
-            # Fallback: use Yes/No structure
-            if a_price is None and len(prices) == 2:
-                if _name_matches(q, comp1) and 'win' in q.lower():
-                    a_price = prices[0][1]
-                    b_price = round(100 - a_price, 1)
-                elif _name_matches(q, comp2) and 'win' in q.lower():
-                    b_price = prices[0][1]
-                    a_price = round(100 - b_price, 1)
-            if a_price is None and b_price is None: continue
-            results.append({
-                'source': 'Polymarket',
-                'question': q,
-                'a_price': a_price,
-                'b_price': b_price,
-                'volume24h': float(mkt.get('volume24hr') or 0),
-                'url': f"https://polymarket.com/event/{mkt.get('slug','')}",
-                'active': True,
-                'live': '(In-Game' in q or 'Live' in q,
-            })
-    return sorted(results, key=lambda x: -x['volume24h'])[:3]
+        events.extend(data.get('events', []))
+    _kalshi_cache['data'] = events
+    _kalshi_cache['ts'] = time.time()
+    return events
 
 def fetch_kalshi(comp1, comp2, sport):
-    """Search Kalshi markets using public endpoints (no auth needed for prices)."""
-    # Kalshi moved to api.elections.kalshi.com; public market browsing needs no auth
+    """Scan Kalshi events for markets matching this matchup."""
     base = 'https://api.elections.kalshi.com/trade-api/v2'
     results = []
     seen = set()
 
-    for query in [comp1, comp2, sport]:
-        url = f"{base}/markets?limit=50&status=open"
-        data = _json_get(url)
-        for mkt in data.get('markets', []):
-            title = (mkt.get('title') or '') + ' ' + (mkt.get('yes_sub_title') or '')
-            full_text = title.lower()
-            if title in seen: continue
-            if not (_name_matches(full_text, comp1) or _name_matches(full_text, comp2)):
-                continue
-            seen.add(title)
-            yes_price = float(mkt.get('last_price_dollars') or mkt.get('yes_bid_dollars') or 0) * 100
-            if yes_price == 0:
-                yes_price = float(mkt.get('yes_ask_dollars') or 0) * 100
+    # Try events first (cleaner titles)
+    events = _get_all_kalshi_events()
+    for event in events:
+        title = event.get('title', '')
+        t_lower = title.lower()
+        if not (_name_matches(t_lower, comp1) or _name_matches(t_lower, comp2)):
+            continue
+        # Fetch individual markets within this event
+        et = event.get('event_ticker', '')
+        mkts = _json_get(f"{base}/events/{et}").get('markets', [])
+        for mkt in mkts:
+            mt = mkt.get('title', '') + ' ' + mkt.get('yes_sub_title', '')
+            if mt in seen: continue
+            seen.add(mt)
+            yes_price = float(mkt.get('last_price_dollars') or mkt.get('yes_bid_dollars') or mkt.get('yes_ask_dollars') or 0) * 100
             ticker = mkt.get('ticker', '')
             a_price, b_price = None, None
-            if _name_matches(full_text, comp1):
-                a_price = round(yes_price, 1)
-                b_price = round(100 - yes_price, 1)
-            elif _name_matches(full_text, comp2):
-                b_price = round(yes_price, 1)
-                a_price = round(100 - yes_price, 1)
-            if a_price is None and b_price is None:
-                continue
-            series = ticker.split('-')[0].lower() if ticker else ''
+            if _name_matches(t_lower, comp1):
+                a_price = round(yes_price, 1); b_price = round(100 - yes_price, 1)
+            elif _name_matches(t_lower, comp2):
+                b_price = round(yes_price, 1); a_price = round(100 - yes_price, 1)
+            if a_price is None: continue
+            series = et.split('-')[0].lower() if et else ''
             results.append({
                 'source': 'Kalshi',
-                'question': mkt.get('title', ticker),
+                'question': title,
                 'a_price': a_price,
                 'b_price': b_price,
                 'volume24h': float(mkt.get('volume_24h_fp') or 0) / 100,
                 'url': f"https://kalshi.com/markets/{series}/{ticker}",
-                'active': mkt.get('status') == 'open',
-                'live': 'live' in full_text or 'in-game' in full_text,
+                'active': True,
+                'live': 'live' in t_lower or 'in-game' in t_lower,
             })
+
     return sorted(results, key=lambda x: -x['volume24h'])[:3]
 
 @app.route('/api/markets')
