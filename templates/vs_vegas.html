@@ -23,14 +23,14 @@
 
     <div class="vv-header">
       <h1 class="lb-title">Model vs. Vegas</h1>
-      <p class="lb-sub">How the AI stacks up against sportsbook odds</p>
+      <p class="lb-sub">How Scout stacks up against sportsbook odds</p>
     </div>
 
     {% if total %}
 
     <div class="vv-scoreboard">
       <div class="vv-side vv-ai">
-        <div class="vv-label">🤖 WhoWins AI</div>
+        <div class="vv-label">🤖 WhoWins Scout</div>
         <div class="vv-big-pct">{{ ai_rate }}%</div>
         <div class="vv-record">{{ ai_correct }}W / {{ total - ai_correct }}L</div>
         <div class="vv-note">{{ total }} settled picks</div>
@@ -58,8 +58,8 @@
           <tr>
             <th>Matchup</th>
             <th>Sport</th>
-            <th>AI Pick</th>
-            <th>AI %</th>
+            <th>Scout Pick</th>
+            <th>Scout %</th>
             <th>Vegas %</th>
             <th>Result</th>
             <th>Edge</th>

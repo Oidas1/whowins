@@ -48,6 +48,13 @@ class UserProfile(db.Model):
     first_seen  = db.Column(db.DateTime, default=datetime.utcnow)
     last_seen   = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Command(db.Model):
+    __tablename__ = 'ww_commands'
+    id         = db.Column(db.Integer, primary_key=True)
+    text       = db.Column(db.Text, nullable=False)
+    status     = db.Column(db.String(20), default='pending')  # pending / done
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class Parlay(db.Model):
     __tablename__ = 'ww_parlays'
     id          = db.Column(db.Integer, primary_key=True)
@@ -429,14 +436,22 @@ Your training data contains deep knowledge across all competitive domains. For s
 
 STEP 0 — KNOWLEDGE RECALL (do this FIRST):
 Before any math, recall what you know about each subject from training data.
-KNOW_A: [everything you know about {comp1} in the context of {sport} — rankings, records, polls, stats, history]
-KNOW_B: [everything you know about {comp2} in the context of {sport} — same level of detail]
+KNOW_A: [everything you know about {comp1} in the context of {sport} — rankings, records, polls, stats, history. If any live research above provides UTR/ranking data, cross-reference it: if the player is primarily known for a DIFFERENT sport than {sport}, that data likely reflects a name coincidence or recreational play — flag this and ignore that data point.]
+KNOW_B: [same depth for {comp2} — same cross-reference rule applies]
+
+STEP 0.5 — STYLE MATCHUP ANALYSIS (sports only):
+Before running math, analyze HOW each competitor plays and whether one style systematically beats the other:
+- Offensive/defensive identity: does one impose their game, the other react?
+- Pace preference: does one thrive in fast/physical play, the other in slow/technical?
+- Key weapon vs key vulnerability: does A's best strength attack B's biggest weakness, or vice versa?
+- Historical style precedent: does this TYPE of matchup (e.g., counter-puncher vs brawler, zone defense vs isolation scorer, big-server vs baseliner) have a documented historical winner?
+- Score this 0-10 for each side and factor into Step 1 baseline.
 
 STEP 1 — DOMAIN-SPECIFIC ANALYTICAL BASELINE:
 Identify the domain from TOPIC and apply the appropriate model:
 
 SPORTS (NBA/NFL/MLB/Soccer/Tennis/Boxing/MMA/Golf):
-  Tennis: Elo formula P = 1/(1+10^((B_Elo-A_Elo)/400)). UTR gap 1.0 = ~70% win prob.
+  Tennis: Elo formula P = 1/(1+10^((B_Elo-A_Elo)/400)). UTR gap 1.0 = ~70% win prob. IMPORTANT: Only use UTR data if the player is a confirmed tennis competitor — if they are primarily known for another sport (basketball, football, etc.) their UTR likely reflects casual/recreational play and should be ignored.
   Soccer: Poisson model on xG. Basketball: Pythagorean W% = Pts^13.91/(Pts^13.91+PA^13.91).
   NFL: 1 spread point = 2.8% shift. Baseball: Log5 formula. MMA/Boxing: strike accuracy, finishing rate.
 
@@ -1184,6 +1199,35 @@ def api_odds():
         return jsonify({'found': False, 'reason': 'no_match'})
     except Exception:
         return jsonify({'found': False, 'reason': 'error'})
+
+
+# ── Command Inbox ─────────────────────────────────────────────────────────────
+
+@app.route('/inbox', methods=['GET', 'POST'])
+def command_inbox():
+    if request.args.get('key') != ADMIN_KEY and session.get('admin_authed') != True:
+        if request.method == 'POST' and request.form.get('key') == ADMIN_KEY:
+            session['admin_authed'] = True
+        else:
+            return render_template('inbox.html', auth=False, commands=[])
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            text = request.form.get('text', '').strip()
+            if text:
+                db.session.add(Command(text=text))
+                db.session.commit()
+        elif action == 'done':
+            cmd = Command.query.get(request.form.get('cmd_id'))
+            if cmd: cmd.status = 'done'; db.session.commit()
+        elif action == 'delete':
+            cmd = Command.query.get(request.form.get('cmd_id'))
+            if cmd: db.session.delete(cmd); db.session.commit()
+        return redirect(url_for('command_inbox', key=ADMIN_KEY))
+
+    commands = Command.query.order_by(Command.created_at.desc()).all()
+    return render_template('inbox.html', auth=True, commands=commands, admin_key=ADMIN_KEY)
 
 # ── Leaderboard ───────────────────────────────────────────────────────────────
 

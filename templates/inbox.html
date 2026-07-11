@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Command Inbox</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .inbox-wrap { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+    .inbox-form textarea { width: 100%; min-height: 100px; resize: vertical; }
+    .cmd-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+    .cmd-card.done { opacity: 0.45; }
+    .cmd-text { font-size: 0.95rem; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
+    .cmd-meta { font-size: 0.75rem; color: var(--muted); }
+    .cmd-actions { display: flex; gap: 8px; }
+    .pending-count { font-size: 0.78rem; font-weight: 700; color: var(--accent); }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <span style="font-size:0.8rem;color:var(--muted);">Command Inbox</span>
+</header>
+
+<main>
+  <div class="inbox-wrap">
+
+  {% if not auth %}
+  <div class="admin-login">
+    <h2>Command Inbox</h2>
+    <form method="POST">
+      <input type="hidden" name="action" value="login">
+      <input type="password" name="key" placeholder="Admin key" class="admin-input" autofocus>
+      <button type="submit" class="btn-admin">Enter</button>
+    </form>
+  </div>
+
+  {% else %}
+
+  <div class="admin-add-card">
+    <h3>📱 Send a command</h3>
+    <form method="POST" action="/inbox?key={{ admin_key }}" class="add-form">
+      <input type="hidden" name="action" value="add">
+      <textarea name="text" placeholder="e.g. Add dark mode to WhoWins&#10;Fix the parlay slip bug where...&#10;Add a new feature that..." class="admin-textarea" required></textarea>
+      <button type="submit" class="btn-admin">Send Command →</button>
+    </form>
+  </div>
+
+  {% set pending = commands | selectattr('status','equalto','pending') | list %}
+  {% if pending %}
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span class="below-label">Pending</span>
+    <span class="pending-count">{{ pending|length }} command{{ 's' if pending|length > 1 else '' }}</span>
+  </div>
+  {% for cmd in pending %}
+  <div class="cmd-card">
+    <div class="cmd-text">{{ cmd.text }}</div>
+    <div class="cmd-meta">{{ cmd.created_at.strftime('%b %d, %Y · %I:%M %p') }}</div>
+    <div class="cmd-actions">
+      <form method="POST" action="/inbox?key={{ admin_key }}" style="display:inline">
+        <input type="hidden" name="action" value="done">
+        <input type="hidden" name="cmd_id" value="{{ cmd.id }}">
+        <button type="submit" class="btn-xs">✓ Mark Done</button>
+      </form>
+      <form method="POST" action="/inbox?key={{ admin_key }}" style="display:inline" onsubmit="return confirm('Delete?')">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="cmd_id" value="{{ cmd.id }}">
+        <button type="submit" class="btn-xs-danger">Delete</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p style="color:var(--muted);font-size:0.88rem;text-align:center;padding:20px;">No pending commands.</p>
+  {% endif %}
+
+  {% set done_cmds = commands | selectattr('status','equalto','done') | list %}
+  {% if done_cmds %}
+  <div class="below-label" style="margin-top:8px;">Completed</div>
+  {% for cmd in done_cmds[:5] %}
+  <div class="cmd-card done">
+    <div class="cmd-text">{{ cmd.text }}</div>
+    <div class="cmd-meta">{{ cmd.created_at.strftime('%b %d') }} · Done</div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% endif %}
+  </div>
+</main>
+</body>
+</html>
