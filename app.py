@@ -2,6 +2,7 @@ import os
 import re
 import uuid
 import hashlib
+import hmac
 import traceback
 import secrets
 import threading
@@ -18,8 +19,53 @@ import json
 from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
+
+# ── Security ──────────────────────────────────────────────────────────────────
+# Simple in-memory rate limiter (per IP)
+_rate_store: dict = {}
+
+def _rate_limit(key: str, max_calls: int, window: int) -> bool:
+    """Return True if allowed, False if rate limited."""
+    now = time.time()
+    calls = [t for t in _rate_store.get(key, []) if now - t < window]
+    if len(calls) >= max_calls:
+        return False
+    calls.append(now)
+    _rate_store[key] = calls
+    return True
+
+def _client_ip() -> str:
+    return request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+
+def _safe_eq(a: str, b: str) -> bool:
+    """Timing-safe string comparison."""
+    return hmac.compare_digest(a.encode(), b.encode())
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    # Allow our own resources + prediction market APIs
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "connect-src 'self' https://api.anthropic.com https://api.tavily.com "
+        "https://api.the-odds-api.com https://gamma-api.polymarket.com "
+        "https://api.elections.kalshi.com https://api.utrsports.net; "
+        "frame-ancestors 'none';"
+    )
+    return response
 app.secret_key = os.environ.get('SECRET_KEY', 'change-me-in-production')
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=60)
+app.config['PERMANENT_SESSION_LIFETIME']  = timedelta(days=60)
+app.config['SESSION_COOKIE_HTTPONLY']     = True
+app.config['SESSION_COOKIE_SAMESITE']     = 'Lax'
+app.config['SESSION_COOKIE_SECURE']       = os.environ.get('RENDER') is not None  # HTTPS only on Render
+app.config['MAX_CONTENT_LENGTH']          = 64 * 1024  # 64 KB max request body
 
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///whowins.db')
 if db_url.startswith('postgres://'):
@@ -181,13 +227,17 @@ def login():
 
     error = None
     if request.method == 'POST':
-        if request.form.get('password') == get_password():
+        ip = _client_ip()
+        if not _rate_limit(f'login:{ip}', max_calls=10, window=300):
+            error = 'Too many attempts. Wait a few minutes.'
+        elif request.form.get('password') == get_password():
             session.permanent = True
             session['authed'] = True
             get_user_uid()
             rotate_password()
             return redirect(url_for('index'))
-        error = 'Wrong password. Try again.'
+        else:
+            error = 'Wrong password. Try again.'
     return render_template('login.html', error=error, ref=ref or session.get('ref', ''))
 
 @app.route('/logout')
@@ -197,13 +247,13 @@ def logout():
 
 @app.route('/admin/password')
 def admin_password():
-    if request.args.get('key') != ADMIN_KEY:
+    if not _safe_eq(request.args.get('key',''), ADMIN_KEY):
         return 'Unauthorized.', 403
     return render_template('admin_password.html', password=get_password())
 
 @app.route('/admin/users')
 def admin_users():
-    if request.args.get('key') != ADMIN_KEY:
+    if not _safe_eq(request.args.get('key',''), ADMIN_KEY):
         return 'Unauthorized.', 403
 
     users = UserProfile.query.order_by(UserProfile.first_seen.desc()).all()
@@ -380,10 +430,15 @@ def analyze():
     if not is_authed():
         return Response("Unauthorized.", status=401)
 
-    sport   = request.form.get('sport', '').strip()
-    comp1   = request.form.get('comp1', '').strip()
-    comp2   = request.form.get('comp2', '').strip()
-    context = request.form.get('context', '').strip()
+    # Rate limit: 30 analyses per user per 10 minutes
+    uid = get_user_uid()
+    if not _rate_limit(f'analyze:{uid}', max_calls=30, window=600):
+        return Response("Rate limit reached. Please wait a few minutes.", status=429)
+
+    sport   = request.form.get('sport', '').strip()[:100]
+    comp1   = request.form.get('comp1', '').strip()[:100]
+    comp2   = request.form.get('comp2', '').strip()[:100]
+    context = request.form.get('context', '').strip()[:500]
 
     if not all([sport, comp1, comp2]):
         return Response("Missing fields.", status=400)
@@ -1207,7 +1262,7 @@ def api_odds():
 @app.route('/inbox/api')
 def inbox_api():
     """JSON endpoint for the desktop watcher script."""
-    if request.args.get('key') != ADMIN_KEY:
+    if not _safe_eq(request.args.get('key',''), ADMIN_KEY):
         return jsonify({'error': 'Unauthorized'}), 401
     cmds = Command.query.order_by(Command.created_at.desc()).limit(50).all()
     return jsonify([{
@@ -1217,7 +1272,7 @@ def inbox_api():
 
 @app.route('/inbox', methods=['GET', 'POST'])
 def command_inbox():
-    if request.args.get('key') != ADMIN_KEY and session.get('admin_authed') != True:
+    if not _safe_eq(request.args.get('key',''), ADMIN_KEY) and session.get('admin_authed') != True:
         if request.method == 'POST' and request.form.get('key') == ADMIN_KEY:
             session['admin_authed'] = True
         else:

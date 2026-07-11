@@ -81,6 +81,22 @@ header {
 }
 .nav-link:hover, .nav-link.active { color: var(--accent); }
 
+.nav-install-btn {
+  background: rgba(240,180,41,0.12);
+  border: 1px solid rgba(240,180,41,0.3);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+.nav-install-btn:hover { background: rgba(240,180,41,0.2); }
+
 /* ── Main ────────────────────────────────────────── */
 main {
   max-width: 780px;

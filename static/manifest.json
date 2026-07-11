@@ -1,16 +1,37 @@
 {
   "name": "WhoWins",
   "short_name": "WhoWins",
-  "description": "AI-powered sports win probability",
+  "description": "Scout-powered win probability for any matchup",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#14120f",
   "theme_color": "#14120f",
+  "categories": ["sports", "finance", "entertainment"],
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Prediction",
+      "url": "/",
+      "description": "Run a new prediction"
+    },
+    {
+      "name": "My Journal",
+      "url": "/journal",
+      "description": "View your prediction journal"
     }
   ]
 }
