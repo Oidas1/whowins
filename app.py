@@ -436,8 +436,9 @@ Your training data contains deep knowledge across all competitive domains. For s
 
 STEP 0 — KNOWLEDGE RECALL (do this FIRST):
 Before any math, recall what you know about each subject from training data.
-KNOW_A: [everything you know about {comp1} in the context of {sport} — rankings, records, polls, stats, history. If any live research above provides UTR/ranking data, cross-reference it: if the player is primarily known for a DIFFERENT sport than {sport}, that data likely reflects a name coincidence or recreational play — flag this and ignore that data point.]
-KNOW_B: [same depth for {comp2} — same cross-reference rule applies]
+KNOW_A: [everything you know about {comp1} in the context of {sport} — rankings, records, polls, stats, history.
+  NAME COLLISION RULE: If {comp1} is a common name that belongs to a famous person in a DIFFERENT sport, reason explicitly: "There is a famous [other sport] player named {comp1}, but in the context of {sport}, I am analyzing [name] as a {sport} competitor. Any UTR/ranking data from live research refers to the {sport} version of this person." Use all available data — UTR ratings, rankings, records — for the {sport} context. Do NOT discard live research data because of a name collision; instead interpret it correctly.]
+KNOW_B: [same depth and same name-collision reasoning for {comp2}]
 
 STEP 0.5 — STYLE MATCHUP ANALYSIS (sports only):
 Before running math, analyze HOW each competitor plays and whether one style systematically beats the other:
@@ -451,7 +452,7 @@ STEP 1 — DOMAIN-SPECIFIC ANALYTICAL BASELINE:
 Identify the domain from TOPIC and apply the appropriate model:
 
 SPORTS (NBA/NFL/MLB/Soccer/Tennis/Boxing/MMA/Golf):
-  Tennis: Elo formula P = 1/(1+10^((B_Elo-A_Elo)/400)). UTR gap 1.0 = ~70% win prob. IMPORTANT: Only use UTR data if the player is a confirmed tennis competitor — if they are primarily known for another sport (basketball, football, etc.) their UTR likely reflects casual/recreational play and should be ignored.
+  Tennis: Elo formula P = 1/(1+10^((B_Elo-A_Elo)/400)). UTR gap 1.0 = ~70% win prob. ALWAYS use UTR data when provided — the live UTR lookup queries the actual tennis database, so any rating returned IS for that person as a tennis competitor. If a famous non-tennis player shares the same name, that does not invalidate the UTR data; the UTR database profile belongs to a distinct tennis-playing person with that name.
   Soccer: Poisson model on xG. Basketball: Pythagorean W% = Pts^13.91/(Pts^13.91+PA^13.91).
   NFL: 1 spread point = 2.8% shift. Baseball: Log5 formula. MMA/Boxing: strike accuracy, finishing rate.
 
@@ -1202,6 +1203,17 @@ def api_odds():
 
 
 # ── Command Inbox ─────────────────────────────────────────────────────────────
+
+@app.route('/inbox/api')
+def inbox_api():
+    """JSON endpoint for the desktop watcher script."""
+    if request.args.get('key') != ADMIN_KEY:
+        return jsonify({'error': 'Unauthorized'}), 401
+    cmds = Command.query.order_by(Command.created_at.desc()).limit(50).all()
+    return jsonify([{
+        'id': c.id, 'text': c.text, 'status': c.status,
+        'created_at': c.created_at.isoformat()
+    } for c in cmds])
 
 @app.route('/inbox', methods=['GET', 'POST'])
 def command_inbox():
