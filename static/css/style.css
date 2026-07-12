@@ -394,6 +394,53 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 }
 .reason-line:first-child::before { display: none; }
 
+/* Comeback alert */
+.comeback-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 16px;
+  margin-top: 10px;
+  background: linear-gradient(135deg, rgba(196,122,114,0.12), rgba(196,122,114,0.06));
+  border: 1px solid rgba(196,122,114,0.35);
+  border-left: 3px solid var(--red);
+  border-radius: 10px;
+  animation: fadeSlide 0.4s ease;
+}
+.comeback-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+.comeback-text { font-size: 0.83rem; color: var(--text); line-height: 1.5; }
+
+/* Scout tip */
+.scout-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px;
+  margin-top: 10px;
+  background: linear-gradient(135deg, rgba(126,184,212,0.1), rgba(122,170,130,0.07));
+  border: 1px solid rgba(126,184,212,0.3);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  animation: fadeSlide 0.5s ease;
+}
+.scout-tip-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.scout-tip-text {
+  font-size: 0.85rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .conf-badge-big {
   font-size: 0.85rem;
   font-weight: 700;

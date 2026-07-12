@@ -109,14 +109,16 @@ function parse(text) {
     return m ? m[1].trim() : get(key);
   };
   return {
-    aPct:       parseInt(get('A_PCT'))  || 50,
-    bPct:       parseInt(get('B_PCT'))  || 50,
-    winner:     get('WINNER'),
-    confidence: get('CONFIDENCE') || 'Medium',
-    edge:       parseInt(get('EDGE')) || null,
-    knowA:      get('KNOW_A'),
-    knowB:      get('KNOW_B'),
-    reason:     getMultiline('REASON'),
+    aPct:          parseInt(get('A_PCT'))  || 50,
+    bPct:          parseInt(get('B_PCT'))  || 50,
+    winner:        get('WINNER'),
+    confidence:    get('CONFIDENCE') || 'Medium',
+    edge:          parseInt(get('EDGE')) || null,
+    knowA:         get('KNOW_A'),
+    knowB:         get('KNOW_B'),
+    reason:        getMultiline('REASON'),
+    comebackAlert: get('COMEBACK_ALERT'),
+    scoutTip:      getMultiline('SCOUT_TIP'),
   };
 }
 
@@ -175,6 +177,29 @@ function render(d) {
     reasonEl.style.display = 'block';
   } else {
     reasonEl.style.display = 'none';
+  }
+
+  // Comeback alert
+  const oldCB = document.getElementById('comebackAlert');
+  if (oldCB) oldCB.remove();
+  const cbText = d.comebackAlert && d.comebackAlert !== '—' && d.comebackAlert.trim();
+  if (cbText) {
+    const cbEl = document.createElement('div');
+    cbEl.id = 'comebackAlert';
+    cbEl.className = 'comeback-alert';
+    cbEl.innerHTML = `<span class="comeback-icon">🔥</span><span class="comeback-text">${cbText}</span>`;
+    document.getElementById('resultSection').querySelector('.result-card').appendChild(cbEl);
+  }
+
+  // Scout tip
+  const oldTip = document.getElementById('scoutTip');
+  if (oldTip) oldTip.remove();
+  if (d.scoutTip && d.scoutTip.trim()) {
+    const tipEl = document.createElement('div');
+    tipEl.id = 'scoutTip';
+    tipEl.className = 'scout-tip';
+    tipEl.innerHTML = `<span class="scout-tip-label">🎯 Scout's Eye</span><span class="scout-tip-text">${d.scoutTip}</span>`;
+    document.getElementById('resultSection').querySelector('.result-card').appendChild(tipEl);
   }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });

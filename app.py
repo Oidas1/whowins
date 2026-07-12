@@ -452,7 +452,7 @@ def analyze():
             client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
             with client.messages.stream(
                 model="claude-opus-4-8",
-                max_tokens=1800,
+                max_tokens=2400,
                 messages=[{"role": "user", "content": prompt}]
             ) as stream:
                 for text in stream.text_stream:
@@ -502,6 +502,15 @@ Before running math, analyze HOW each competitor plays and whether one style sys
 - Key weapon vs key vulnerability: does A's best strength attack B's biggest weakness, or vice versa?
 - Historical style precedent: does this TYPE of matchup (e.g., counter-puncher vs brawler, zone defense vs isolation scorer, big-server vs baseliner) have a documented historical winner?
 - Score this 0-10 for each side and factor into Step 1 baseline.
+
+RANKING TRAP GUARD (critical rule — apply before every analysis):
+Rankings are backward-looking aggregates. Do NOT let #1 ranking alone push probability above 75% without corroborating evidence from MULTIPLE factors. Always ask:
+• Is the top-ranked competitor in current peak form, or are there injury/fatigue/slump signals?
+• Does the H2H record support the ranking gap, or does the lower-ranked competitor have wins against them?
+• Does the style matchup create a ceiling on the top seed's advantage (e.g., a big-server vs a great returner)?
+• Is the lower-ranked competitor on a recent hot streak, trending up, or peaking at the right time?
+• Is the higher-ranked competitor defending a ranking vs actually being in form right now?
+A #1 player or top seed deserves meaningful weight — but a lower-ranked competitor with favorable conditions, strong H2H, a style advantage, or strong recent form can realistically sit at 35-50% probability. Never let a ranking alone settle the analysis.
 
 STEP 1 — DOMAIN-SPECIFIC ANALYTICAL BASELINE:
 Identify the domain from TOPIC and apply the appropriate model:
@@ -553,11 +562,19 @@ STEP 4 — BAYESIAN UPDATE (when market odds provided above):
   W = 0.65 (High confidence), 0.50 (Medium), 0.35 (Low)
   Market divergence >15% = re-examine assumptions, but hold if evidence is strong.
 
-STEP 5 — IT FACTOR (+/-5% max):
+STEP 5 — IT FACTOR + COMEBACK DNA (+/-8% combined):
   Will to win / competitive drive under maximum pressure.
   Peak ceiling vs current trajectory.
   In-competition adaptability when plan A fails.
   Hunger: motivated challenger vs comfortable frontrunner.
+
+  COMEBACK DNA (evaluate explicitly):
+  Does either competitor have documented history of winning from a losing position?
+  • Tennis: winning from a set down, saving match points, recovering from 0-5 in a set
+  • Team sports: erasing multi-goal/run/point halftime deficits
+  • Politics/markets: closing large polling gaps in final weeks
+  • General: historical pattern of reversing unfavorable odds under pressure
+  If one competitor has clearly stronger comeback ability AND the matchup is within 20%, apply +2-5% for the better comeback competitor. This is especially relevant when the underdog has a documented "never say die" pattern. Note it explicitly in COMEBACK_ALERT.
 
 STEP 6 — FINAL:
   Combine all steps. Cap at 95%, floor at 5%.
@@ -565,7 +582,7 @@ STEP 6 — FINAL:
   MEDIUM: baseline favors one, adjustments mixed.
   LOW: limited data, conflicting signals, or genuinely near 50/50.
 
-OUTPUT FORMAT — output these eight lines exactly:
+OUTPUT FORMAT — output these ten lines exactly:
 KNOW_A: [1-3 sentences of specific facts about {comp1} in context of {sport}]
 KNOW_B: [1-3 sentences of specific facts about {comp2} in context of {sport}]
 A_PCT: [number]
@@ -574,12 +591,15 @@ WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
 EDGE: [number]
 REASON: [3-5 sentences: domain-specific edge with data, H2H/polling/metrics if known, key deciding factor, caution flag if any]
+COMEBACK_ALERT: [Write "—" if neither competitor has notable comeback history. Otherwise write ONE sentence: "{Name} has comeback DNA — [one specific documented example, e.g., 'saved 3 match points vs Djokovic at Roland Garros 2024']". Only flag this if genuinely documented, not generic.]
+SCOUT_TIP: [1-2 sentences of proactive scout insight the user should know — a non-obvious edge, value angle, or caution flag. E.g.: "Despite the ranking gap, {name}'s heavy topspin neutralizes {name2}'s flat power game — this is closer than it looks." or "The numbers favor {winner} but {other}'s comeback record in best-of-5 formats makes them a live underdog." Never leave blank — always give a genuine tip.]
 
 RULES:
-- NEVER refuse or output anything outside these eight lines.
+- NEVER refuse or output anything outside these ten lines.
 - With zero knowledge, write "Unknown — limited training data" in KNOW fields, set CONFIDENCE Low.
 - Percentages sum to exactly 100.
-- REASON must cite real data points wherever you know them."""
+- REASON must cite real data points wherever you know them.
+- SCOUT_TIP must always contain a real insight — never write "N/A" or leave it blank."""
 def web_search(query, depth="basic", max_results=5):
     """Search Tavily. depth='advanced' gives deeper crawl (costs 2 credits vs 1)."""
     if not TAVILY_API_KEY:
@@ -823,7 +843,7 @@ def _get_all_kalshi_events():
             break
     _kalshi_all_cache['data'] = events
     _kalshi_all_cache['ts'] = time.time()
-    return markets
+    return events
 
 def fetch_polymarket(comp1, comp2, sport):
     """Scan all active Polymarket markets and return ones matching this matchup."""
