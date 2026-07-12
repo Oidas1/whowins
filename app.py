@@ -591,8 +591,8 @@ WINNER: [full name]
 CONFIDENCE: [High/Medium/Low]
 EDGE: [number]
 REASON: [3-5 sentences: domain-specific edge with data, H2H/polling/metrics if known, key deciding factor, caution flag if any]
-COMEBACK_ALERT: [Write "—" if neither competitor has notable comeback history. Otherwise write ONE sentence: "{Name} has comeback DNA — [one specific documented example, e.g., 'saved 3 match points vs Djokovic at Roland Garros 2024']". Only flag this if genuinely documented, not generic.]
-SCOUT_TIP: [1-2 sentences of proactive scout insight the user should know — a non-obvious edge, value angle, or caution flag. E.g.: "Despite the ranking gap, {name}'s heavy topspin neutralizes {name2}'s flat power game — this is closer than it looks." or "The numbers favor {winner} but {other}'s comeback record in best-of-5 formats makes them a live underdog." Never leave blank — always give a genuine tip.]
+COMEBACK_ALERT: [Write "—" if neither competitor has notable comeback history. Otherwise write ONE sentence: "NAME has comeback DNA — [one specific documented example, e.g., 'saved 3 match points vs Djokovic at Roland Garros 2024']". Only flag this if genuinely documented, not generic.]
+SCOUT_TIP: [1-2 sentences of proactive scout insight the user should know — a non-obvious edge, value angle, or caution flag. E.g.: "Despite the ranking gap, PLAYER_A's heavy topspin neutralizes PLAYER_B's flat power game — this is closer than it looks." or "The numbers favor the WINNER but the UNDERDOG's comeback record in best-of-5 formats makes them a live underdog." Never leave blank — always give a genuine tip.]
 
 RULES:
 - NEVER refuse or output anything outside these ten lines.
