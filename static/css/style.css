@@ -2082,3 +2082,208 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   .admin-table-wrap { display: none; }
   .admin-cards      { display: flex; }
 }
+
+/* ── Plays Page ───────────────────────────────────── */
+
+.plays-page-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 24px 16px 4px;
+  max-width: 640px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+.plays-page-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.plays-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.plays-desc {
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 640px;
+  margin: 0 auto 20px;
+  padding: 0 16px;
+  line-height: 1.5;
+}
+.plays-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 16px;
+}
+.plays-error, .plays-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  max-width: 400px;
+  margin: 0 auto;
+}
+.plays-section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  padding: 0 16px;
+  margin: 24px auto 10px;
+  max-width: 640px;
+}
+.plays-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* Play card */
+.play-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.play-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.play-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.play-edge-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 50px;
+}
+.edge-positive {
+  background: rgba(122,170,130,0.15);
+  color: var(--green);
+  border: 1px solid rgba(122,170,130,0.35);
+}
+.edge-negative {
+  background: rgba(196,122,114,0.12);
+  color: var(--red);
+  border: 1px solid rgba(196,122,114,0.3);
+}
+.play-trade-link {
+  font-size: 0.78rem;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.play-trade-link:hover { text-decoration: underline; }
+
+.play-question {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.play-prob-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.play-prob-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+.play-prob-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.play-prob-val {
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.play-prob-market { color: var(--muted); }
+.play-prob-scout  { color: var(--accent); }
+.play-prob-side {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.play-prob-arrow {
+  font-size: 1rem;
+  color: var(--border);
+  flex-shrink: 0;
+}
+.play-prob-scout-block { border-right: 1px solid var(--border); }
+.play-pick-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-left: 10px;
+  min-width: 54px;
+}
+.play-pick-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.play-pick-val {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--green);
+}
+.play-pick-pct {
+  font-size: 0.72rem;
+  color: var(--green);
+  font-weight: 600;
+}
+
+.play-tip {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.5;
+  padding-left: 2px;
+}
+
+.play-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+}
+.play-conf { color: var(--muted); }
+.play-vol  { color: var(--muted); }
+
+/* Plays disclaimer */
+.plays-disclaimer {
+  max-width: 640px;
+  margin: 28px auto 0;
+  padding: 12px 16px 32px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.5;
+  text-align: center;
+}

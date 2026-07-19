@@ -582,6 +582,16 @@ STEP 6 — FINAL:
   MEDIUM: baseline favors one, adjustments mixed.
   LOW: limited data, conflicting signals, or genuinely near 50/50.
 
+CONFIDENCE CALIBRATION (follow exactly — this is critical for accuracy):
+  HIGH requires ALL THREE: (a) baseline model strongly favors one side, (b) at least 2 independent adjustments (H2H, form, style, market) confirm it, AND (c) probability gap is ≥60/40.
+  MEDIUM: two signals agree, OR gap is 55/45–59/41 with some supporting evidence.
+  LOW: only one signal, conflicting evidence, gap under 55/45, or limited data.
+  CRITICAL RULES:
+  — Do NOT output HIGH when ranking is the only favorable signal.
+  — Do NOT output HIGH when research results returned empty or thin data.
+  — A 50/50 call is not embarrassing; it is honest and accurate.
+  — If you have real doubt, output MEDIUM. Reserve HIGH for genuine slam dunks with multiple proof points.
+
 OUTPUT FORMAT — output these ten lines exactly:
 KNOW_A: [1-3 sentences of specific facts about {comp1} in context of {sport}]
 KNOW_B: [1-3 sentences of specific facts about {comp2} in context of {sport}]
@@ -674,9 +684,9 @@ def research_competitor(name, sport):
     extras = SPORT_SEARCH_TERMS.get(sport_key, [sport])
 
     queries = [
-        f"{name} {extras[0] if extras else sport} career statistics",
-        f"{name} {extras[1] if len(extras) > 1 else sport} ranking record 2025 2026",
-        f"{name} {sport} profile results history",
+        f"{name} {extras[0] if extras else sport} career statistics record",
+        f"{name} {sport} recent form results wins losses 2026",
+        f"{name} {sport} ranking current season performance",
     ]
 
     results = []
@@ -702,8 +712,10 @@ def build_prompt(sport, comp1, comp2, context):
         threading.Thread(target=fetch, args=('comp1', research_competitor, comp1, sport)),
         threading.Thread(target=fetch, args=('comp2', research_competitor, comp2, sport)),
         threading.Thread(target=fetch, args=('h2h', web_search,
-            f"{comp1} vs {comp2} {sport} head to head history", "basic", 4)),
+            f"{comp1} vs {comp2} {sport} head to head history results", "basic", 4)),
         threading.Thread(target=fetch, args=('odds', fetch_odds, sport, comp1, comp2)),
+        threading.Thread(target=fetch, args=('news', web_search,
+            f"{comp1} OR {comp2} {sport} injury news update latest", "basic", 3)),
     ]
     if is_tennis:
         threads += [
@@ -740,8 +752,9 @@ def build_prompt(sport, comp1, comp2, context):
         )
 
     search_block = utr_block  # UTR data takes priority for tennis
-    if research.get('comp1') or research.get('comp2') or research.get('h2h'):
+    if research.get('comp1') or research.get('comp2') or research.get('h2h') or research.get('news'):
         search_block += '\n\nSUPPLEMENTAL RESEARCH (use to verify/update training knowledge):\n'
+        if research.get('news'):  search_block += f'\n[BREAKING NEWS / INJURIES]\n{research["news"]}\n'
         if research.get('comp1'): search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
         if research.get('comp2'): search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
         if research.get('h2h'):  search_block += f'\n[HEAD-TO-HEAD]\n{research["h2h"]}\n'
@@ -1600,6 +1613,218 @@ def generate_share_image(comp1, comp2, sport, a_pct, b_pct, winner, confidence, 
     img.save(buf, format='PNG', optimize=True)
     buf.seek(0)
     return buf
+
+# ── Plays of the Day / Week ───────────────────────────────────────────────────
+
+_plays_cache = {'plays': [], 'ts': 0}
+_PLAYS_TTL   = 3600 * 6   # regenerate every 6 hours
+
+PLAYS_BATCH_PROMPT = """You are an elite prediction market analyst with broad knowledge across sports, politics, crypto, finance, and entertainment.
+
+Analyze each market below. For each one, determine the TRUE probability of the YES outcome based on your knowledge, then compare it to the current market price to identify potential mispricing.
+
+{markets_block}
+
+For each numbered market, output EXACTLY one line in this format:
+N|PCT:number|CONF:High/Medium/Low|TIP:one sentence
+
+Rules:
+- PCT = your estimate of the true YES probability as a whole number (1 to 99)
+- CONF = your confidence in the estimate (High/Medium/Low)
+- TIP = one clear sentence: why your estimate differs from the market, or why you agree
+- If you have no meaningful knowledge of a market, output: N|PCT:market_price|CONF:Low|TIP:Insufficient data to estimate
+- Output ONLY the numbered pipe-delimited lines — no headers, no extra text
+- Never refuse a line; every market must get a response"""
+
+
+def _fetch_plays_markets():
+    """Pull top binary markets from Polymarket + Kalshi for plays analysis."""
+    candidates = []
+
+    # Polymarket — active binary markets in the interesting price range
+    for mkt in (_get_all_poly_markets() or []):
+        q = mkt.get('question', '')
+        if not q:
+            continue
+        prices = _parse_poly_prices(mkt)
+        if len(prices) != 2:
+            continue
+        yes_pct = prices[0][1]
+        if not (18 <= yes_pct <= 82):   # skip near-certain outcomes
+            continue
+        vol = float(mkt.get('volume24hr') or 0)
+        if vol < 300:
+            continue
+        candidates.append({
+            'source':      'Polymarket',
+            'question':    q,
+            'yes_pct':     yes_pct,
+            'no_pct':      round(100 - yes_pct, 1),
+            'yes_outcome': prices[0][0],
+            'volume24h':   vol,
+            'url':         f"https://polymarket.com/event/{mkt.get('slug', '')}",
+        })
+
+    # Kalshi — top series active markets
+    base = 'https://api.elections.kalshi.com/trade-api/v2'
+    for series in ['KXWNBAGAME', 'KXWNFLGAME', 'KXMLBF3', 'KXATPMATCH',
+                   'KXWCGAME', 'KXMLSGAME', 'KXNASCARRACE', 'KXF1RACEPODIUM']:
+        data = _json_get(f"{base}/markets?series_ticker={series}&limit=20&status=open")
+        for mkt in data.get('markets', []):
+            title = mkt.get('title', '')
+            if not title:
+                continue
+            yes_price = float(mkt.get('last_price_dollars') or
+                              mkt.get('yes_bid_dollars') or 0) * 100
+            if not (18 <= yes_price <= 82):
+                continue
+            vol = float(mkt.get('volume_24h_fp') or 0) / 100
+            if vol < 50:
+                continue
+            ticker = mkt.get('ticker', '')
+            candidates.append({
+                'source':      'Kalshi',
+                'question':    title,
+                'yes_pct':     round(yes_price, 1),
+                'no_pct':      round(100 - yes_price, 1),
+                'yes_outcome': 'Yes',
+                'volume24h':   vol,
+                'url':         f"https://kalshi.com/markets/{series.lower()}/{ticker}",
+            })
+
+    # Deduplicate, sort by volume, take top 15
+    seen, out = set(), []
+    for c in sorted(candidates, key=lambda x: -x['volume24h']):
+        if c['question'] not in seen:
+            seen.add(c['question'])
+            out.append(c)
+        if len(out) >= 15:
+            break
+    return out
+
+
+def _generate_plays():
+    """Run a single batch AI call across candidate markets; return ranked plays."""
+    markets = _fetch_plays_markets()
+    if not markets or not ANTHROPIC_API_KEY:
+        return []
+
+    lines = []
+    for i, m in enumerate(markets, 1):
+        lines.append(
+            f"MARKET {i}:\n"
+            f"  Question: {m['question']}\n"
+            f"  Current market price: YES {m['yes_pct']}% / NO {m['no_pct']}%\n"
+            f"  Source: {m['source']}"
+        )
+    markets_block = '\n\n'.join(lines)
+    prompt = PLAYS_BATCH_PROMPT.format(markets_block=markets_block)
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model="claude-opus-4-8",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = msg.content[0].text.strip()
+    except Exception:
+        return []
+
+    plays = []
+    for line in raw.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        m_match = re.match(
+            r'^(\d+)\s*\|?\s*PCT:(\d+)\s*\|?\s*CONF:(High|Medium|Low)\s*\|?\s*TIP:(.+)$',
+            line, re.IGNORECASE
+        )
+        if not m_match:
+            continue
+        idx     = int(m_match.group(1)) - 1
+        ai_pct  = int(m_match.group(2))
+        conf    = m_match.group(3).strip().capitalize()
+        tip     = m_match.group(4).strip()
+
+        if idx < 0 or idx >= len(markets):
+            continue
+
+        mkt        = markets[idx]
+        mkt_pct    = mkt['yes_pct']
+        edge       = round(ai_pct - mkt_pct, 1)
+        abs_edge   = abs(edge)
+
+        if abs_edge < 6:     # skip near-consensus markets
+            continue
+        if conf == 'Low':    # skip low-confidence plays
+            continue
+
+        # Determine the recommended pick side
+        if edge > 0:
+            pick      = 'YES'
+            pick_pct  = ai_pct
+        else:
+            pick      = 'NO'
+            pick_pct  = round(100 - ai_pct, 1)
+
+        plays.append({
+            **mkt,
+            'ai_pct':    ai_pct,
+            'edge':      edge,
+            'abs_edge':  abs_edge,
+            'pick':      pick,
+            'pick_pct':  pick_pct,
+            'confidence': conf,
+            'tip':        tip,
+        })
+
+    plays.sort(key=lambda x: -x['abs_edge'])
+    return plays
+
+
+def get_cached_plays(force=False):
+    if not force and time.time() - _plays_cache['ts'] < _PLAYS_TTL and _plays_cache['plays']:
+        return _plays_cache['plays']
+    try:
+        plays = _generate_plays()
+        if plays:
+            _plays_cache['plays'] = plays
+            _plays_cache['ts']    = time.time()
+        return plays or _plays_cache.get('plays', [])
+    except Exception:
+        return _plays_cache.get('plays', [])
+
+
+@app.route('/plays')
+def plays():
+    if not is_authed():
+        return redirect(url_for('login'))
+    return render_template('plays.html')
+
+
+@app.route('/api/plays')
+def api_plays():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    all_plays  = get_cached_plays()
+    ts         = _plays_cache.get('ts', 0)
+    age_min    = round((time.time() - ts) / 60) if ts else None
+    return jsonify({
+        'day':       all_plays[:3],
+        'week':      all_plays[3:8],
+        'age_min':   age_min,
+        'total':     len(all_plays),
+    })
+
+
+@app.route('/api/plays/refresh')
+def api_plays_refresh():
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return 'Unauthorized.', 403
+    threading.Thread(target=get_cached_plays, kwargs={'force': True}, daemon=True).start()
+    return jsonify({'ok': True, 'msg': 'Refresh triggered in background'})
+
 
 @app.route('/share/image', methods=['POST'])
 def share_image():

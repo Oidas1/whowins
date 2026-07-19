@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Plays</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/vs-vegas" class="nav-link">vs Vegas</a>
+    <a href="/plays" class="nav-link active">Plays</a>
+    <a href="/leaderboard" class="nav-link">Leaderboard</a>
+    <a href="/journal" class="nav-link">Journal</a>
+    <a href="/logout" class="nav-link">Logout</a>
+  </nav>
+</header>
+
+<main>
+
+  <div class="plays-page-header">
+    <div class="plays-page-title">🎯 Scout Plays</div>
+    <div class="plays-meta" id="playsMeta">Scanning markets…</div>
+  </div>
+
+  <p class="plays-desc">Scout scours Polymarket &amp; Kalshi, finds where the market is mispriced, and surfaces the highest-confidence value picks.</p>
+
+  <!-- Loading -->
+  <div id="playsLoading" class="plays-loading">
+    <div class="loading-dots"><span></span><span></span><span></span><span></span><span></span></div>
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:12px">Analyzing markets…</p>
+  </div>
+
+  <!-- Error -->
+  <div id="playsError" class="plays-error" style="display:none">
+    <p>⚠️ Could not load plays right now. Try again shortly.</p>
+  </div>
+
+  <!-- Day picks -->
+  <div id="daySection" style="display:none">
+    <div class="plays-section-label">🔥 Today's Best Picks</div>
+    <div id="dayList" class="plays-list"></div>
+  </div>
+
+  <!-- Week picks -->
+  <div id="weekSection" style="display:none">
+    <div class="plays-section-label">📅 More Plays This Week</div>
+    <div id="weekList" class="plays-list"></div>
+  </div>
+
+  <!-- Empty -->
+  <div id="playsEmpty" style="display:none" class="plays-empty">
+    <p>No strong plays found right now. Markets are fairly priced or Scout needs more data.</p>
+    <p style="font-size:0.8rem;color:var(--muted);margin-top:8px">Check back in a few hours.</p>
+  </div>
+
+  <div class="plays-disclaimer">
+    ⚠️ Scout Plays are probability-based insights for informational use only — not financial or betting advice. Edge values show Scout's estimated probability vs current market price.
+  </div>
+
+</main>
+
+<script>
+async function loadPlays() {
+  try {
+    const res  = await fetch('/api/plays');
+    const data = await res.json();
+    document.getElementById('playsLoading').style.display = 'none';
+
+    const total = (data.day || []).length + (data.week || []).length;
+
+    // Update meta
+    let metaText = '';
+    if (data.age_min !== null && data.age_min !== undefined) {
+      metaText = data.age_min < 2
+        ? 'Updated just now'
+        : data.age_min < 60
+          ? `Updated ${data.age_min}m ago`
+          : `Updated ${Math.round(data.age_min / 60)}h ago`;
+    }
+    if (total > 0) metaText += ` · ${total} plays found`;
+    document.getElementById('playsMeta').textContent = metaText;
+
+    if (total === 0) {
+      document.getElementById('playsEmpty').style.display = 'block';
+      return;
+    }
+
+    if (data.day && data.day.length) {
+      document.getElementById('dayList').innerHTML  = data.day.map(renderCard).join('');
+      document.getElementById('daySection').style.display = 'block';
+    }
+    if (data.week && data.week.length) {
+      document.getElementById('weekList').innerHTML = data.week.map(renderCard).join('');
+      document.getElementById('weekSection').style.display = 'block';
+    }
+
+  } catch (_) {
+    document.getElementById('playsLoading').style.display = 'none';
+    document.getElementById('playsError').style.display   = 'block';
+  }
+}
+
+function renderCard(p) {
+  const edgePositive = p.edge > 0;
+  const edgeLabel    = edgePositive ? `+${Math.abs(p.edge).toFixed(1)}%` : `-${Math.abs(p.edge).toFixed(1)}%`;
+  const edgeClass    = edgePositive ? 'edge-positive' : 'edge-negative';
+  const confEmoji    = p.confidence === 'High' ? '🔥' : '⚡';
+  const sourceCls    = p.source === 'Polymarket' ? 'badge-poly' : 'badge-kalshi';
+  const vol          = p.volume24h >= 1000
+    ? '$' + (p.volume24h / 1000).toFixed(1) + 'k'
+    : '$' + Math.round(p.volume24h);
+
+  return `
+    <div class="play-card">
+      <div class="play-card-top">
+        <div class="play-badges">
+          <span class="market-source-badge ${sourceCls}">${p.source}</span>
+          <span class="play-edge-badge ${edgeClass}">${edgeLabel} Scout edge</span>
+        </div>
+        <a href="${p.url}" target="_blank" rel="noopener" class="play-trade-link">Trade →</a>
+      </div>
+
+      <div class="play-question">${p.question}</div>
+
+      <div class="play-prob-row">
+        <div class="play-prob-block">
+          <div class="play-prob-label">Market</div>
+          <div class="play-prob-val play-prob-market">${p.yes_pct}%</div>
+          <div class="play-prob-side">YES</div>
+        </div>
+        <div class="play-prob-arrow">→</div>
+        <div class="play-prob-block play-prob-scout-block">
+          <div class="play-prob-label">Scout</div>
+          <div class="play-prob-val play-prob-scout">${p.ai_pct}%</div>
+          <div class="play-prob-side">YES</div>
+        </div>
+        <div class="play-pick-box">
+          <div class="play-pick-label">Pick</div>
+          <div class="play-pick-val">${p.pick}</div>
+          <div class="play-pick-pct">${p.pick_pct}%</div>
+        </div>
+      </div>
+
+      <div class="play-tip">${p.tip}</div>
+
+      <div class="play-footer">
+        <span class="play-conf">${confEmoji} ${p.confidence} Confidence</span>
+        <span class="play-vol">24h vol: ${vol}</span>
+      </div>
+    </div>
+  `;
+}
+
+loadPlays();
+</script>
+</body>
+</html>
