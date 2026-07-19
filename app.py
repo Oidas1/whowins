@@ -86,6 +86,12 @@ _password_store = {'value': os.environ.get('SITE_PASSWORD', 'whowins2026')}
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
+class AppConfig(db.Model):
+    """Key-value store for app-level config that must survive server restarts."""
+    __tablename__ = 'ww_config'
+    key   = db.Column(db.String(100), primary_key=True)
+    value = db.Column(db.Text, nullable=False)
+
 class UserProfile(db.Model):
     __tablename__ = 'ww_users'
     id          = db.Column(db.Integer, primary_key=True)
@@ -132,6 +138,28 @@ class Query(db.Model):
 with app.app_context():
     try:
         db.create_all()
+        # Load a stable SECRET_KEY from DB so sessions survive every server restart
+        # and every SITE_PASSWORD rotation (which triggers a Render redeploy).
+        try:
+            row = AppConfig.query.filter_by(key='secret_key').first()
+            if row:
+                app.secret_key = row.value
+            else:
+                # First boot: use env var if set, otherwise generate one, then pin it in DB
+                sk = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+                try:
+                    db.session.add(AppConfig(key='secret_key', value=sk))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    # Another worker beat us to it — read theirs
+                    row = AppConfig.query.filter_by(key='secret_key').first()
+                    if row:
+                        sk = row.value
+                app.secret_key = sk
+        except Exception as e:
+            print(f"Warning: could not pin SECRET_KEY in DB: {e}")
+            # Falls back to the value already set at module level
     except Exception as e:
         print(f"Warning: could not create tables on startup: {e}")
 
@@ -234,6 +262,7 @@ def login():
             session.permanent = True
             session['authed'] = True
             get_user_uid()
+            rotate_password()
             return redirect(url_for('index'))
         else:
             error = 'Wrong password. Try again.'
