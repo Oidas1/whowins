@@ -543,38 +543,54 @@ CONDITIONS ANALYSIS (always evaluate — these factors shift probability indepen
   Apply any relevant conditions adjustments BEFORE reaching Step 1.
 
 STEP 1 — DOMAIN-SPECIFIC ANALYTICAL BASELINE:
-Identify the domain from TOPIC and apply the appropriate model:
+Identify the domain from TOPIC and apply the appropriate model. Extract the specific metrics listed under each sport from the research data provided above — these numbers matter more than narrative descriptions.
 
-SPORTS (NBA/NFL/MLB/Soccer/Tennis/Boxing/MMA/Golf):
-  Tennis: Elo formula P = 1/(1+10^((B_Elo-A_Elo)/400)). UTR gap 1.0 = ~70% win prob. ALWAYS use UTR data when provided — the live UTR lookup queries the actual tennis database, so any rating returned IS for that person as a tennis competitor. If a famous non-tennis player shares the same name, that does not invalidate the UTR data; the UTR database profile belongs to a distinct tennis-playing person with that name.
-  Soccer: Poisson model on xG. Basketball: Pythagorean W% = Pts^13.91/(Pts^13.91+PA^13.91).
-  NFL: 1 spread point = 2.8% shift. Baseball: Log5 formula. MMA/Boxing: strike accuracy, finishing rate.
+SPORTS:
+  TENNIS: Elo formula P = 1/(1+10^((B_Elo-A_Elo)/400)). UTR gap 1.0 = ~70% win prob. ALWAYS use UTR data when provided.
+    EXTRACT FROM RESEARCH: surface-specific win% (clay/hard/grass), first-serve%, break points saved/converted, H2H on this surface, recent seeding, ace rate.
+    SURFACE SHIFT: A player's probability can shift 10-20% depending on surface vs their preferred surface.
+
+  SOCCER/FOOTBALL: Poisson model on recent xG (expected goals for and against).
+    EXTRACT FROM RESEARCH: xG for and against last 5 games, form table (W/D/L string), goals scored/conceded, clean sheets %, H2H at this venue type.
+    NOTE: Single soccer match = very high variance. A 60% favorite should rarely get above 60% for a single game.
+
+  BASKETBALL (NBA/WNBA): Pythagorean W% = Pts^13.91/(Pts^13.91+PA^13.91).
+    EXTRACT FROM RESEARCH: Net rating (offensive rating minus defensive rating — most predictive single stat), eFG%, pace, last-10-game record, home/road splits, key player injury status.
+    Net rating differential: each +5 net rating = approximately +8% win probability in regular season.
+
+  FOOTBALL (NFL/NCAA): 1 spread point = 2.8% win probability shift.
+    EXTRACT FROM RESEARCH: EPA per play (offense and defense), turnover differential, red zone efficiency, yards per attempt, third-down conversion rate, rest advantage.
+    Turnover differential: each +1 turnover per game edge = ~+4% win probability.
+
+  BASEBALL (MLB): Log5 formula. Run differential = best team quality predictor.
+    EXTRACT FROM RESEARCH: Team wOBA or OPS (offense), starting pitcher FIP or ERA (not ERA alone — FIP removes luck), bullpen ERA, BABIP (if >.360 = luck, if <.240 = unlucky — adjust accordingly), run differential.
+
+  MMA/BOXING: Strike accuracy × finishing rate = base threat level.
+    EXTRACT FROM RESEARCH: Striking accuracy%, takedown defense%, finishing rate, significant strikes per minute, reach advantage, recent opponent quality, weight-cut history.
+
+  GOLF: Strokes gained (SG) is the gold standard.
+    EXTRACT FROM RESEARCH: SG Total, SG Off-the-Tee, SG Approach, SG Putting, course history for this specific venue, current form in recent tournaments, course type match (links/parkland/elevation).
 
 POLITICS / ELECTIONS:
   Polling average gap: each +5% polling lead = ~+8% win probability, with incumbency +3%.
   Fundraising edge: each 2x fundraising advantage = ~+3% probability.
-  Historical base rates: incumbent advantage, electoral college/geography, approval rating baseline.
-  Apply: P(A wins) = base_rate + polling_adjustment + fundamentals_adjustment + momentum.
+  EXTRACT FROM RESEARCH: polling average margin, trend direction, approval ratings, demographic breakdowns, early vote performance.
 
 CRYPTO / FINANCE:
   Market dominance: relative market cap, 30-day price momentum, developer activity (GitHub commits).
-  Adoption metrics: daily active wallets, transaction volume, institutional holding %.
-  Macro environment: interest rate sensitivity, risk-on/risk-off positioning.
+  EXTRACT FROM RESEARCH: price momentum (30/90-day), volume trend, institutional holding%, on-chain metrics.
 
 ENTERTAINMENT / AWARDS:
-  Historical base rate: prior wins in this category, nomination frequency.
-  Critical momentum: Metacritic/Rotten Tomatoes score, social media sentiment, precursor awards won.
-  Industry positioning: label/studio support, campaign spend, public popularity.
+  Historical base rate: prior wins, nomination frequency, precursor awards won.
+  EXTRACT FROM RESEARCH: Metacritic/RT score, social media sentiment, box office/chart trajectory, industry campaign spend.
 
 BUSINESS / COMPANIES:
-  Revenue growth differential, market cap trajectory, product pipeline strength.
-  Competitive moat depth, customer retention, margin comparison.
+  Revenue growth differential, market cap trajectory, competitive moat depth.
 
 GEOPOLITICS:
   Power asymmetry (GDP, military, alliance structure), historical precedent, current leverage.
-  Diplomatic positioning, public opinion in relevant regions.
 
-GENERAL (anything else):
+GENERAL:
   Start 50/50, apply evidence-weighted adjustments for each advantage found.
 
 STEP 2 — TEMPORAL WEIGHTING:
@@ -586,6 +602,25 @@ STEP 3 — QUANTIFIED ADJUSTMENTS (add/subtract %):
   POLITICS: Incumbency +3%, geographic stronghold +2-5%, debate performance +/-2%, scandal -5 to -10%
   FINANCE: Macro tailwind/headwind +/-5%, regulatory risk -5%, network effect moat +3%
   GENERAL: Apply domain-appropriate modifiers with similar magnitude ranges
+
+  REGRESSION-TO-MEAN (always check):
+    Hot streaks (7+ consecutive wins) reliably regress toward the long-run average. Apply -2 to -4% to the hot competitor.
+    Cold streaks (6+ consecutive losses) also regress upward. Apply +2 to +4% to the cold competitor.
+    Baseball BABIP: if >.360 = luck running hot (expect regression down); if <.240 = unlucky (expect regression up). Adjust ±4%.
+    A team/player WELL above their season average in recent games → expect partial regression.
+
+  STRENGTH OF SCHEDULE (SOS):
+    Recent wins over bottom-5 opponents count ~50% of face value. Wins over top-5 opponents count 150%.
+    Recent losses to top-5 opponents matter ~50% as much as a loss to an equal competitor.
+    If research reveals one side has been padding their record against weak competition, apply -3 to -5%.
+    If research shows one side has been battling top competition and staying competitive, credit +2 to +4%.
+
+  FORMAT VARIANCE (affects CONFIDENCE level, not just probability):
+    Single elimination / one game (especially soccer): HIGH VARIANCE. Cap CONFIDENCE at MEDIUM even if analytics favor one side 65%+.
+    Best-of-3: 60% single-game edge → ~65% series. Moderate variance — MEDIUM confidence appropriate.
+    Best-of-5: 60% game → ~68% series. 65% game → ~76% series.
+    Best-of-7: 60% game → ~71% series. 65% game → ~80% series. Lower variance — HIGH confidence more supportable.
+    Round-robin tournament: rewards consistency, not peaks — weight season record more heavily than recent hot streak.
 
 STEP 4 — BAYESIAN UPDATE (when market odds provided above):
   P_final = (W x P_analysis) + ((1-W) x P_market)
@@ -683,16 +718,89 @@ def web_search(query, depth="basic", max_results=5):
     except Exception:
         return ''
 
-SPORT_SEARCH_TERMS = {
-    'tennis': ['ITA college tennis', 'ATP ITF UTR ranking', 'Challenger Futures pro tennis'],
-    'mma': ['UFC Bellator MMA record', 'fight history Sherdog Tapology'],
-    'boxing': ['boxing record BoxRec', 'pro boxing career fights'],
-    'basketball': ['NBA G League basketball stats', 'college basketball NCAA'],
-    'football': ['NFL college football stats', 'pro football reference'],
-    'soccer': ['football career goals assists', 'transfer market stats'],
-    'baseball': ['MLB minor league baseball stats', 'Baseball Reference'],
-    'golf': ['PGA Tour golf ranking OWGR', 'golf stats strokes gained'],
+# Sport-specific query profiles — each tuple is (query_template, tavily_depth)
+# {name} is substituted with the competitor's name
+SPORT_RESEARCH_PROFILES = {
+    'tennis': [
+        ("{name} ATP WTA ITF ranking surface win percentage clay hard grass statistics 2025 2026", "advanced"),
+        ("{name} tennis recent matches results form last 10 wins losses 2026", "basic"),
+        ("{name} tennis serve statistics first serve percentage aces break points career", "basic"),
+    ],
+    'atp':  'tennis',
+    'wta':  'tennis',
+    'itf':  'tennis',
+    'nba': [
+        ("{name} NBA statistics 2025-26 season points rebounds assists net rating offensive defensive rating efficiency", "advanced"),
+        ("{name} NBA team recent form last 10 games win loss streak 2026", "basic"),
+        ("{name} NBA shooting percentage eFG true shooting home road splits conference standing", "basic"),
+    ],
+    'basketball': 'nba',
+    'wnba': [
+        ("{name} WNBA statistics 2025 2026 season points rebounds assists efficiency", "advanced"),
+        ("{name} WNBA team recent form results 2026", "basic"),
+        ("{name} WNBA standings record conference 2026", "basic"),
+    ],
+    'nfl': [
+        ("{name} NFL statistics 2025 season EPA yards touchdowns passing rushing efficiency", "advanced"),
+        ("{name} NFL recent games last 5 performance results 2025 2026", "basic"),
+        ("{name} NFL team record standings division turnover differential red zone 2025", "basic"),
+    ],
+    'football': 'nfl',
+    'mlb': [
+        ("{name} MLB statistics 2025 2026 batting average OBP slugging wOBA ERA WHIP FIP BABIP", "advanced"),
+        ("{name} MLB recent games last 10 results form 2026", "basic"),
+        ("{name} MLB team standings wins losses run differential home away record 2026", "basic"),
+    ],
+    'baseball': 'mlb',
+    'nhl': [
+        ("{name} NHL statistics 2025-26 goals assists points Corsi Fenwick possession shooting percentage", "advanced"),
+        ("{name} NHL team recent form last 10 games win loss streak 2026", "basic"),
+        ("{name} NHL standings points power play percentage penalty kill goals for against 2026", "basic"),
+    ],
+    'hockey': 'nhl',
+    'soccer': [
+        ("{name} soccer football goals assists xG expected goals statistics 2025 2026 season", "advanced"),
+        ("{name} football recent form last 5 matches results table position 2025 2026", "basic"),
+        ("{name} soccer defensive record clean sheets goals conceded form table standing 2026", "basic"),
+    ],
+    'epl': 'soccer', 'mls': 'soccer', 'bundesliga': 'soccer', 'laliga': 'soccer',
+    'champions': 'soccer', 'world': 'soccer', 'fifa': 'soccer',
+    'mma': [
+        ("{name} MMA UFC record wins losses KO TKO submission significant strikes statistics career", "advanced"),
+        ("{name} MMA fighter recent fights 2025 2026 results performance", "basic"),
+        ("{name} fighter striking accuracy takedown defense grappling wrestling style", "basic"),
+    ],
+    'ufc': 'mma',
+    'boxing': [
+        ("{name} boxing professional record wins losses knockouts KO ratio BoxRec ranking", "advanced"),
+        ("{name} boxer recent fights 2025 2026 results performance KO TKO decision", "basic"),
+        ("{name} boxing punch power speed reach style strengths weaknesses analysis", "basic"),
+    ],
+    'golf': [
+        ("{name} PGA Tour LPGA strokes gained total approach putting off tee 2025 2026", "advanced"),
+        ("{name} golf recent tournament results form finishes 2025 2026", "basic"),
+        ("{name} golf course history specific venue performance statistics", "basic"),
+    ],
+    'cricket': [
+        ("{name} cricket batting average runs wickets bowling economy statistics 2025 2026", "advanced"),
+        ("{name} cricket recent matches form results 2025 2026", "basic"),
+        ("{name} cricket pitch conditions format test ODI T20 record", "basic"),
+    ],
+    'formula': [
+        ("{name} F1 Formula One championship points fastest laps qualifying statistics 2025 2026", "advanced"),
+        ("{name} F1 recent race results form podiums 2025 2026", "basic"),
+        ("{name} F1 team constructor reliability tire strategy circuit history", "basic"),
+    ],
 }
+
+def _resolve_sport_profile(sport):
+    """Resolve sport string to a research profile, following alias chains."""
+    key = sport.lower().split()[0]
+    profile = SPORT_RESEARCH_PROFILES.get(key)
+    # Follow string aliases (e.g. 'basketball' -> 'nba')
+    if isinstance(profile, str):
+        profile = SPORT_RESEARCH_PROFILES.get(profile)
+    return profile  # None if not found → use generic
 
 def fetch_utr(name):
     """Query UTR Sports API for a player's singles UTR rating. Returns dict or None."""
@@ -715,25 +823,83 @@ def fetch_utr(name):
     except Exception:
         return None
 
+ESPN_LEAGUE_MAP = {
+    'nba': ('basketball', 'nba'),
+    'basketball': ('basketball', 'nba'),
+    'nfl': ('football', 'nfl'),
+    'football': ('football', 'nfl'),
+    'mlb': ('baseball', 'mlb'),
+    'baseball': ('baseball', 'mlb'),
+    'nhl': ('hockey', 'nhl'),
+    'hockey': ('hockey', 'nhl'),
+    'mls': ('soccer', 'usa.1'),
+    'soccer': ('soccer', 'eng.1'),   # default EPL for generic 'soccer'
+    'epl': ('soccer', 'eng.1'),
+}
+
+def fetch_espn_team_stats(sport_str, team_name):
+    """Pull structured standings + recent form from ESPN's free API."""
+    sport_key = sport_str.lower().split()[0]
+    league_info = ESPN_LEAGUE_MAP.get(sport_key)
+    if not league_info:
+        return None
+    sport_path, league_path = league_info
+    try:
+        url = f"https://site.api.espn.com/apis/site/v2/sports/{sport_path}/{league_path}/teams"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        data = json.loads(urllib.request.urlopen(req, timeout=6).read())
+        teams = data.get('sports', [{}])[0].get('leagues', [{}])[0].get('teams', [])
+        # Find best match by name
+        team_name_lower = team_name.lower()
+        matched = None
+        for t in teams:
+            tn = t.get('team', {})
+            names = [tn.get('displayName',''), tn.get('shortDisplayName',''), tn.get('name',''), tn.get('abbreviation','')]
+            if any(team_name_lower in n.lower() or n.lower() in team_name_lower for n in names if n):
+                matched = tn
+                break
+        if not matched:
+            return None
+        tid = matched.get('id')
+        # Get team record from scoreboard
+        sb_url = f"https://site.api.espn.com/apis/site/v2/sports/{sport_path}/{league_path}/teams/{tid}"
+        req2 = urllib.request.Request(sb_url, headers={'User-Agent': 'Mozilla/5.0'})
+        tdata = json.loads(urllib.request.urlopen(req2, timeout=6).read())
+        record = tdata.get('team', {}).get('record', {}).get('items', [{}])[0]
+        stats = {s.get('name'): s.get('displayValue') for s in record.get('stats', [])}
+        return {
+            'team': matched.get('displayName', team_name),
+            'wins': stats.get('wins', '?'),
+            'losses': stats.get('losses', '?'),
+            'pct': stats.get('winPercent', '?'),
+            'streak': stats.get('streak', '?'),
+            'home': stats.get('home', '?'),
+            'away': stats.get('away', '?'),
+        }
+    except Exception:
+        return None
+
 def utr_win_probability(utr_a, utr_b):
     """Elo-based win probability from UTR ratings. 1.0 UTR ≈ 150 Elo points."""
     elo_diff = (utr_a - utr_b) * 150
     return round(1 / (1 + 10 ** (-elo_diff / 400)) * 100, 1)
 
 def research_competitor(name, sport):
-    """Run targeted searches for a competitor, using sport-specific terms."""
-    sport_key = sport.lower().split()[0]
-    extras = SPORT_SEARCH_TERMS.get(sport_key, [sport])
+    """Run KPI-targeted searches for a competitor using sport-specific query profiles."""
+    profile = _resolve_sport_profile(sport)
 
-    queries = [
-        f"{name} {extras[0] if extras else sport} career statistics record",
-        f"{name} {sport} recent form results wins losses 2026",
-        f"{name} {sport} ranking current season performance",
-    ]
+    if profile:
+        query_pairs = [(tmpl.format(name=name), depth) for tmpl, depth in profile]
+    else:
+        # Generic fallback
+        query_pairs = [
+            (f"{name} {sport} career statistics record performance history", "advanced"),
+            (f"{name} {sport} recent form results wins losses 2025 2026", "basic"),
+            (f"{name} {sport} ranking current season standing efficiency metrics", "basic"),
+        ]
 
     results = []
-    for i, q in enumerate(queries):
-        depth = "advanced" if i == 0 else "basic"
+    for q, depth in query_pairs:
         result = web_search(q, depth=depth, max_results=5)
         if result:
             results.append(result)
@@ -748,7 +914,8 @@ def build_prompt(sport, comp1, comp2, context):
         except Exception:
             research[key] = None
 
-    is_tennis = any(w in sport.lower() for w in ['tennis', 'atp', 'wta', 'itf', 'challenger', 'utr'])
+    is_tennis     = any(w in sport.lower() for w in ['tennis', 'atp', 'wta', 'itf', 'challenger', 'utr'])
+    is_team_sport = any(w in sport.lower() for w in list(ESPN_LEAGUE_MAP.keys()))
 
     threads = [
         threading.Thread(target=fetch, args=('comp1', research_competitor, comp1, sport)),
@@ -767,6 +934,11 @@ def build_prompt(sport, comp1, comp2, context):
         threads += [
             threading.Thread(target=fetch, args=('utr1', fetch_utr, comp1)),
             threading.Thread(target=fetch, args=('utr2', fetch_utr, comp2)),
+        ]
+    if is_team_sport:
+        threads += [
+            threading.Thread(target=fetch, args=('espn1', fetch_espn_team_stats, sport, comp1)),
+            threading.Thread(target=fetch, args=('espn2', fetch_espn_team_stats, sport, comp2)),
         ]
     for t in threads: t.start()
     for t in threads: t.join(timeout=14)
@@ -797,14 +969,26 @@ def build_prompt(sport, comp1, comp2, context):
             f'  {comp2}: {odds["b_pct"]}% implied probability\n'
         )
 
-    search_block = utr_block  # UTR data takes priority for tennis
+    # ESPN structured stats block
+    espn_block = ''
+    e1, e2 = research.get('espn1'), research.get('espn2')
+    if e1 or e2:
+        espn_block = '\nESPN LIVE TEAM RECORDS (structured — use as primary record data):\n'
+        for label, e, name in [(comp1, e1, comp1), (comp2, e2, comp2)]:
+            if e:
+                espn_block += (
+                    f'  {e["team"]}: {e["wins"]}W-{e["losses"]}L ({e["pct"]} pct) | '
+                    f'Home: {e["home"]} | Away: {e["away"]} | Streak: {e["streak"]}\n'
+                )
+
+    search_block = utr_block + espn_block  # structured data first
     has_research = any(research.get(k) for k in ('comp1','comp2','h2h','news','recent_h2h','conditions'))
     if has_research:
         search_block += '\n\nSUPPLEMENTAL RESEARCH (use to verify/update training knowledge):\n'
         if research.get('news'):       search_block += f'\n[BREAKING NEWS / INJURIES]\n{research["news"]}\n'
         if research.get('conditions'): search_block += f'\n[CONDITIONS: VENUE / REST / SCHEDULE]\n{research["conditions"]}\n'
-        if research.get('comp1'):      search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
-        if research.get('comp2'):      search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
+        if research.get('comp1'):      search_block += f'\n[RESEARCH: {comp1} — KPI-targeted]\n{research["comp1"]}\n'
+        if research.get('comp2'):      search_block += f'\n[RESEARCH: {comp2} — KPI-targeted]\n{research["comp2"]}\n'
         if research.get('h2h'):        search_block += f'\n[HEAD-TO-HEAD (career)]\n{research["h2h"]}\n'
         if research.get('recent_h2h'): search_block += f'\n[HEAD-TO-HEAD (recent — 2025/2026)]\n{research["recent_h2h"]}\n'
 
