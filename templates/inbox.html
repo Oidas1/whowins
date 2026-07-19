@@ -47,6 +47,43 @@
     </form>
   </div>
 
+  <div class="admin-add-card">
+    <h3>🔗 Friend invite link</h3>
+    <p style="font-size:0.83rem;color:var(--muted);margin:0 0 12px;">Generate a link friends can click to instantly log in — no password needed. Valid for 7 days.</p>
+    <button class="btn-admin" id="inviteBtn" onclick="generateInvite()">Generate invite link</button>
+    <div id="inviteResult" style="display:none;margin-top:12px;">
+      <input id="inviteUrl" type="text" readonly style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);font-size:0.8rem;">
+      <button onclick="copyInvite()" style="margin-top:6px;font-size:0.78rem;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 10px;cursor:pointer;">Copy</button>
+      <span id="inviteCopied" style="font-size:0.78rem;color:var(--green);margin-left:8px;display:none;">Copied!</span>
+    </div>
+  </div>
+  <script>
+  async function generateInvite() {
+    const btn = document.getElementById('inviteBtn');
+    btn.textContent = 'Generating…';
+    btn.disabled = true;
+    try {
+      const res  = await fetch('/admin/invite-link?key={{ admin_key }}');
+      const data = await res.json();
+      if (data.link) {
+        document.getElementById('inviteUrl').value = data.link;
+        document.getElementById('inviteResult').style.display = 'block';
+      }
+    } catch (_) { alert('Error generating link'); }
+    btn.textContent = 'Generate invite link';
+    btn.disabled = false;
+  }
+  function copyInvite() {
+    const url = document.getElementById('inviteUrl');
+    url.select();
+    navigator.clipboard.writeText(url.value).then(() => {
+      const c = document.getElementById('inviteCopied');
+      c.style.display = 'inline';
+      setTimeout(() => { c.style.display = 'none'; }, 2000);
+    });
+  }
+  </script>
+
   {% set pending = commands | selectattr('status','equalto','pending') | list %}
   {% if pending %}
   <div style="display:flex;align-items:center;gap:8px;">

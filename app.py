@@ -234,7 +234,6 @@ def login():
             session.permanent = True
             session['authed'] = True
             get_user_uid()
-            rotate_password()
             return redirect(url_for('index'))
         else:
             error = 'Wrong password. Try again.'
@@ -244,6 +243,47 @@ def login():
 def logout():
     session.pop('authed', None)     # keep user_uid so history persists
     return redirect(url_for('login'))
+
+
+def _make_invite_token(days=7):
+    """Create an HMAC-signed invite token valid for `days` days."""
+    expires  = str(int(time.time()) + days * 86400)
+    sig      = hmac.new(app.secret_key.encode(), expires.encode(), hashlib.sha256).hexdigest()[:20]
+    raw      = f"{expires}.{sig}"
+    return urllib.parse.quote(raw, safe='')
+
+def _verify_invite_token(token):
+    try:
+        raw              = urllib.parse.unquote(token)
+        expires_str, sig = raw.split('.', 1)
+        if time.time() > int(expires_str):
+            return False
+        expected = hmac.new(app.secret_key.encode(), expires_str.encode(), hashlib.sha256).hexdigest()[:20]
+        return hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
+
+@app.route('/i/<token>')
+def invite_login(token):
+    """Friend-shareable invite link — no password required."""
+    if _verify_invite_token(token):
+        session.permanent = True
+        session['authed'] = True
+        get_user_uid()
+        return redirect(url_for('index'))
+    return redirect(url_for('login'))
+
+@app.route('/admin/invite-link')
+def admin_invite_link():
+    """Generate a 7-day invite link. Requires ADMIN_KEY."""
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    days  = min(int(request.args.get('days', 7)), 30)
+    token = _make_invite_token(days)
+    link  = url_for('invite_login', token=token, _external=True)
+    return jsonify({'link': link, 'valid_days': days,
+                    'note': 'Share this URL with friends — no password needed.'})
+
 
 @app.route('/admin/password')
 def admin_password():
@@ -1981,22 +2021,33 @@ def generate_share_image(comp1, comp2, sport, a_pct, b_pct, winner, confidence, 
 _plays_cache = {'plays': [], 'ts': 0}
 _PLAYS_TTL   = 3600 * 6   # regenerate every 6 hours
 
-PLAYS_BATCH_PROMPT = """You are an elite prediction market analyst with broad knowledge across sports, politics, crypto, finance, and entertainment.
+PLAYS_BATCH_PROMPT = """You are an elite prediction market analyst.
 
-Analyze each market below. For each one, determine the TRUE probability of the YES outcome based on your knowledge, then compare it to the current market price to identify potential mispricing.
+TODAY'S DATE: {today}
+
+CRITICAL — LIVE CONTEXT OVERRIDES TRAINING DATA:
+Your training data has a knowledge cutoff and may be months or years out of date. Each market below includes LIVE CONTEXT fetched minutes ago. You MUST use the live context to determine current event state.
+
+Examples of how training data goes wrong:
+- Training may think a tournament has many rounds left; live context shows it is in the final
+- Training may think a candidate leads in polls; live context shows they dropped out
+- Training may think a team's star player is healthy; live context shows they are injured
+
+Always re-anchor to the live context. If the live context reveals the market question is already effectively settled (e.g., only 2 teams left in a 48-team tournament and the market asks if one of them wins), adjust your probability accordingly — do NOT use the old training-data frame.
+
+Analyze each market below. For each, determine the TRUE current probability of the YES outcome using the live context provided, then compare to the market price to identify mispricing.
 
 {markets_block}
 
-For each numbered market, output EXACTLY one line in this format:
+For each numbered market, output EXACTLY one line:
 N|PCT:number|CONF:High/Medium/Low|TIP:one sentence
 
 Rules:
-- PCT = your estimate of the true YES probability as a whole number (1 to 99)
-- CONF = your confidence in the estimate (High/Medium/Low)
-- TIP = one clear sentence: why your estimate differs from the market, or why you agree
-- If you have no meaningful knowledge of a market, output: N|PCT:market_price|CONF:Low|TIP:Insufficient data to estimate
-- Output ONLY the numbered pipe-delimited lines — no headers, no extra text
-- Never refuse a line; every market must get a response"""
+- PCT = your best estimate of the true YES probability as a whole number (1 to 99)
+- CONF = High if live context is clear and decisive; Medium if partial; Low if live context is absent or ambiguous
+- TIP = one sentence explaining what the live context shows vs. what the market price implies
+- If live context is missing, output: N|PCT:market_price|CONF:Low|TIP:No live data available — market price used as-is
+- Output ONLY the numbered pipe-delimited lines — no headers, no extra text, never refuse a line"""
 
 
 def _fetch_plays_markets():
@@ -2071,16 +2122,34 @@ def _generate_plays():
     if not markets or not ANTHROPIC_API_KEY:
         return []
 
+    # Research each market in parallel to get live current-state context
+    def _research_market(mkt):
+        q = mkt['question']
+        result = web_search(
+            f"{q} current status result latest news today 2026", depth="basic", max_results=3
+        )
+        mkt['_research'] = (result or '').strip()[:600]
+
+    threads = [threading.Thread(target=_research_market, args=(m,)) for m in markets]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=12)
+
+    today = datetime.utcnow().strftime('%B %d, %Y')
     lines = []
     for i, m in enumerate(markets, 1):
-        lines.append(
+        entry = (
             f"MARKET {i}:\n"
             f"  Question: {m['question']}\n"
             f"  Current market price: YES {m['yes_pct']}% / NO {m['no_pct']}%\n"
             f"  Source: {m['source']}"
         )
+        if m.get('_research'):
+            entry += f"\n  LIVE CONTEXT (as of {today}):\n  {m['_research']}"
+        else:
+            entry += f"\n  LIVE CONTEXT: [no live data retrieved — rely only on market price]"
+        lines.append(entry)
     markets_block = '\n\n'.join(lines)
-    prompt = PLAYS_BATCH_PROMPT.format(markets_block=markets_block)
+    prompt = PLAYS_BATCH_PROMPT.format(markets_block=markets_block, today=today)
 
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
