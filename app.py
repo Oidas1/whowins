@@ -489,6 +489,9 @@ MATHEMATICAL ANALYSIS PROTOCOL (run all steps silently — never appear in outpu
 CRITICAL KNOWLEDGE RULE:
 Your training data contains deep knowledge across all competitive domains. For sports: ATP/WTA/ITF rankings, UTR ratings, NFL/NBA/MLB/NHL stats, boxing records, MMA fight histories. For politics: polling averages, approval ratings, fundraising totals, electoral history. For crypto/finance: market caps, on-chain metrics, price history. For entertainment: chart positions, award history, streaming numbers. ALWAYS draw on this training knowledge first. Empty research results do NOT mean you have no knowledge.
 
+RECENCY OVERRIDE RULE (critical):
+Your training data has a knowledge cutoff. Any statistics, rankings, records, or form data from the past 12 months in the LIVE RESEARCH above must take ABSOLUTE PRIORITY over whatever you recall from training. If live research shows a ranking, win/loss record, or recent form that contradicts your training memory — use the live research figure and treat your training memory as potentially stale. Flag clearly if the live data is sparse or contradictory.
+
 STEP 0 — KNOWLEDGE RECALL (do this FIRST):
 Before any math, recall what you know about each subject from training data.
 KNOW_A: [everything you know about {comp1} in the context of {sport} — rankings, records, polls, stats, history.
@@ -928,7 +931,9 @@ def build_prompt(sport, comp1, comp2, context):
         threading.Thread(target=fetch, args=('recent_h2h', web_search,
             f"{comp1} vs {comp2} {sport} 2025 2026 recent match results", "basic", 3)),
         threading.Thread(target=fetch, args=('conditions', web_search,
-            f"{comp1} vs {comp2} {sport} venue location home away schedule rest days", "basic", 3)),
+            f"{comp1} vs {comp2} {sport} venue location home away schedule rest days weather", "basic", 3)),
+        threading.Thread(target=fetch, args=('lineup', web_search,
+            f"{comp1} vs {comp2} {sport} starting lineup active roster available players confirmed tonight 2026", "basic", 3)),
     ]
     if is_tennis:
         threads += [
@@ -963,10 +968,20 @@ def build_prompt(sport, comp1, comp2, context):
     vegas_block = ''
     odds = research.get('odds')
     if odds and odds.get('found'):
+        n      = odds.get('book_count', 1)
+        spread = odds.get('spread', 0)
+        a_low  = odds.get('a_low', odds['a_pct'])
+        a_high = odds.get('a_high', odds['a_pct'])
+        tight  = odds.get('tight', True)
+        if tight:
+            consensus_label = f'TIGHT consensus ({spread}pp spread) — books strongly agree, weight this heavily'
+        else:
+            consensus_label = f'WIDE spread ({spread}pp) — books disagree; may signal sharp vs. public split or genuine uncertainty. Weight with caution.'
         vegas_block = (
-            f'\nVEGAS MARKET ODDS (use as Bayesian prior in Step 4):\n'
-            f'  {comp1}: {odds["a_pct"]}% implied probability\n'
-            f'  {comp2}: {odds["b_pct"]}% implied probability\n'
+            f'\nVEGAS MARKET ODDS — {n} bookmaker{"s" if n != 1 else ""} (vig-removed, use as Bayesian prior in Step 4):\n'
+            f'  {comp1}: {odds["a_pct"]}% consensus (range: {a_low}%–{a_high}%)\n'
+            f'  {comp2}: {odds["b_pct"]}% consensus\n'
+            f'  {consensus_label}\n'
         )
 
     # ESPN structured stats block
@@ -982,11 +997,12 @@ def build_prompt(sport, comp1, comp2, context):
                 )
 
     search_block = utr_block + espn_block  # structured data first
-    has_research = any(research.get(k) for k in ('comp1','comp2','h2h','news','recent_h2h','conditions'))
+    has_research = any(research.get(k) for k in ('comp1','comp2','h2h','news','recent_h2h','conditions','lineup'))
     if has_research:
         search_block += '\n\nSUPPLEMENTAL RESEARCH (use to verify/update training knowledge):\n'
         if research.get('news'):       search_block += f'\n[BREAKING NEWS / INJURIES]\n{research["news"]}\n'
-        if research.get('conditions'): search_block += f'\n[CONDITIONS: VENUE / REST / SCHEDULE]\n{research["conditions"]}\n'
+        if research.get('lineup'):     search_block += f'\n[STARTING LINEUP / ROSTER AVAILABILITY — check for absences]\n{research["lineup"]}\n'
+        if research.get('conditions'): search_block += f'\n[CONDITIONS: VENUE / REST / SCHEDULE / WEATHER]\n{research["conditions"]}\n'
         if research.get('comp1'):      search_block += f'\n[RESEARCH: {comp1} — KPI-targeted]\n{research["comp1"]}\n'
         if research.get('comp2'):      search_block += f'\n[RESEARCH: {comp2} — KPI-targeted]\n{research["comp2"]}\n'
         if research.get('h2h'):        search_block += f'\n[HEAD-TO-HEAD (career)]\n{research["h2h"]}\n'
@@ -1482,9 +1498,10 @@ def fetch_odds(sport, comp1, comp2):
         if not (any(name_match(t, comp1) for t in teams) and
                 any(name_match(t, comp2) for t in teams)):
             continue
-        # Collect odds across bookmakers
-        a_prices, b_prices = [], []
-        for bk in ev.get('bookmakers', [])[:5]:
+        # Collect vig-removed probabilities per bookmaker (not just raw prices)
+        a_book_pcts, b_book_pcts = [], []
+        for bk in ev.get('bookmakers', [])[:8]:
+            a_pr, b_pr = None, None
             for mkt in bk.get('markets', []):
                 if mkt.get('key') != 'h2h':
                     continue
@@ -1492,17 +1509,29 @@ def fetch_odds(sport, comp1, comp2):
                     nm = outcome.get('name', '')
                     pr = outcome.get('price', 0)
                     if name_match(nm, comp1):
-                        a_prices.append(pr)
+                        a_pr = pr
                     elif name_match(nm, comp2):
-                        b_prices.append(pr)
-        if a_prices and b_prices:
-            a_pct = american_to_pct(sum(a_prices)/len(a_prices))
-            b_pct = american_to_pct(sum(b_prices)/len(b_prices))
-            # Normalize to 100%
-            total = a_pct + b_pct
-            a_pct = round(a_pct / total * 100, 1)
-            b_pct = round(b_pct / total * 100, 1)
-            return {'a_pct': a_pct, 'b_pct': b_pct, 'found': True}
+                        b_pr = pr
+            if a_pr is not None and b_pr is not None:
+                ap = american_to_pct(a_pr)
+                bp = american_to_pct(b_pr)
+                tot = ap + bp
+                if tot > 0:
+                    a_book_pcts.append(round(ap / tot * 100, 1))
+        if a_book_pcts:
+            a_pct = round(sum(a_book_pcts) / len(a_book_pcts), 1)
+            b_pct = round(100 - a_pct, 1)
+            n     = len(a_book_pcts)
+            a_low  = min(a_book_pcts)
+            a_high = max(a_book_pcts)
+            spread = round(a_high - a_low, 1)
+            return {
+                'a_pct': a_pct, 'b_pct': b_pct,
+                'a_low': a_low, 'a_high': a_high,
+                'book_count': n, 'spread': spread,
+                'tight': spread <= 4.0,
+                'found': True,
+            }
     return None
 
 @app.route('/api/odds')
@@ -1521,6 +1550,77 @@ def api_odds():
         return jsonify({'found': False, 'reason': 'no_match'})
     except Exception:
         return jsonify({'found': False, 'reason': 'error'})
+
+
+@app.route('/verify', methods=['POST'])
+def verify_analysis():
+    """Red-team challenger: argues for the predicted loser, returns an adjustment."""
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    data   = request.get_json() or {}
+    sport  = data.get('sport', '')
+    comp1  = data.get('comp1', '')
+    comp2  = data.get('comp2', '')
+    a_pct  = int(data.get('a_pct', 50))
+    b_pct  = int(data.get('b_pct', 50))
+    winner = data.get('winner', comp1)
+    conf   = data.get('confidence', 'Medium')
+
+    # Determine who is the predicted loser
+    first_word_a = comp1.split()[0].lower() if comp1 else ''
+    winner_is_a  = winner.lower().startswith(first_word_a) or first_word_a in winner.lower()
+    loser        = comp2 if winner_is_a else comp1
+    gap          = abs(a_pct - b_pct)
+
+    challenge = (
+        f"You are a contrarian analyst stress-testing a sports/competition prediction.\n\n"
+        f"MATCHUP: {comp1} vs {comp2} ({sport})\n"
+        f"CURRENT PREDICTION: {comp1} {a_pct}% | {comp2} {b_pct}%\n"
+        f"PREDICTED WINNER: {winner} ({conf} confidence, {gap}pp gap)\n\n"
+        f"The analysis already favored {winner}. Your sole job: find what it may have gotten WRONG "
+        f"or systematically UNDERWEIGHTED when evaluating {loser}.\n\n"
+        f"Challenge angles:\n"
+        f"1. Is there a stylistic edge, historical pattern, or situational factor that actually favors {loser}?\n"
+        f"2. Did the analysis overweight one signal (ranking, recent form, home advantage) "
+        f"while missing a countervailing factor?\n"
+        f"3. Is the {gap}pp gap wider than the evidence actually supports — "
+        f"is this really a coin-flip that looks decided?\n"
+        f"4. Are there uncertainty factors (key injury risk, variance, format, motivation) "
+        f"that compress the true probability gap?\n\n"
+        f"Output exactly two lines:\n"
+        f"ADJ: [integer 0–20: percentage points {loser} deserves to gain. 0 = analysis was sound]\n"
+        f"NOTE: [one sentence: the specific overlooked factor, or 'Analysis appears well-calibrated.' if ADJ is 0]"
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model='claude-opus-4-8',
+            max_tokens=120,
+            messages=[{'role': 'user', 'content': challenge}]
+        )
+        raw        = msg.content[0].text.strip()
+        adj_m      = re.search(r'^ADJ:\s*(\d+)', raw, re.MULTILINE)
+        note_m     = re.search(r'^NOTE:\s*(.+)$', raw, re.MULTILINE)
+        adj        = min(int(adj_m.group(1)), 20) if adj_m else 0
+        note       = note_m.group(1).strip() if note_m else ''
+        # Only apply half the challenger's adjustment to avoid overcorrection
+        real_adj   = round(adj * 0.4) if adj >= 5 else 0
+        if winner_is_a:
+            new_a = max(5, a_pct - real_adj)
+            new_b = 100 - new_a
+        else:
+            new_b = max(5, b_pct - real_adj)
+            new_a = 100 - new_b
+        return jsonify({
+            'adj': adj, 'real_adj': real_adj,
+            'new_a_pct': new_a, 'new_b_pct': new_b,
+            'note': note,
+            'verified': adj < 5,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'verified': True, 'adj': 0, 'real_adj': 0,
+                        'new_a_pct': a_pct, 'new_b_pct': b_pct})
 
 
 # ── Command Inbox ─────────────────────────────────────────────────────────────

@@ -81,6 +81,7 @@ document.getElementById('matchupForm').addEventListener('submit', async (e) => {
 
     resultData = parse(fullText);
     render(resultData);
+    verifyAnalysis(resultData); // fire-and-forget challenger pass
 
     // Fetch odds + prediction markets in parallel
     const [oddsData] = await Promise.all([
@@ -214,6 +215,61 @@ function animateCount(elId, target, suffix = '') {
     el.textContent = Math.round(current) + suffix;
     if (current >= target) clearInterval(timer);
   }, 25);
+}
+
+// ── Challenger verification pass ──────────────────
+
+async function verifyAnalysis(d) {
+  const card = document.getElementById('resultSection').querySelector('.result-card');
+  if (!card) return;
+
+  // Remove any prior badge
+  const old = document.getElementById('verifyBadge');
+  if (old) old.remove();
+
+  const badge = document.createElement('div');
+  badge.id = 'verifyBadge';
+  badge.className = 'verify-checking';
+  badge.textContent = '🔍 Cross-checking…';
+  card.appendChild(badge);
+
+  try {
+    const res = await fetch('/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sport: currentSport, comp1: currentComp1, comp2: currentComp2,
+        a_pct: d.aPct, b_pct: d.bPct,
+        winner: d.winner, confidence: d.confidence,
+      }),
+    });
+    const v = await res.json();
+
+    if (v.verified || !v.real_adj) {
+      badge.className = 'verify-passed';
+      badge.textContent = '✓ Scout verified';
+    } else {
+      badge.className = 'verify-adjusted';
+      badge.innerHTML = `⚡ Scout adjusted · <span class="verify-note">${v.note}</span>`;
+
+      // Animate updated percentages
+      if (v.new_a_pct !== d.aPct || v.new_b_pct !== d.bPct) {
+        animateCount('compPctA', v.new_a_pct, '%');
+        animateCount('compPctB', v.new_b_pct, '%');
+        setTimeout(() => {
+          const fa = document.getElementById('probFillA');
+          const fb = document.getElementById('probFillB');
+          if (fa) fa.style.width = v.new_a_pct + '%';
+          if (fb) fb.style.width = v.new_b_pct + '%';
+        }, 100);
+        resultData.aPct = v.new_a_pct;
+        resultData.bPct = v.new_b_pct;
+      }
+    }
+  } catch (_) {
+    const b = document.getElementById('verifyBadge');
+    if (b) b.remove();
+  }
 }
 
 // ── Share image ───────────────────────────────────

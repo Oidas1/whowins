@@ -440,6 +440,10 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 
 .conf-badge-big {
   font-size: 0.85rem;
@@ -2361,3 +2365,43 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 .calib-diff  { font-size: 0.72rem; font-weight: 600; }
 .calib-above { color: var(--green); }
 .calib-below { color: var(--red); }
+
+/* ── Verification badge ───────────────────────────── */
+.verify-checking {
+  font-size: 0.73rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 8px 0 4px;
+  letter-spacing: 0.02em;
+  animation: verifyPulse 1.4s ease-in-out infinite;
+}
+@keyframes verifyPulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
+.verify-passed {
+  font-size: 0.73rem;
+  color: var(--green);
+  text-align: center;
+  padding: 8px 0 4px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  animation: fadeIn 0.4s ease;
+}
+.verify-adjusted {
+  font-size: 0.76rem;
+  color: var(--accent);
+  text-align: center;
+  padding: 10px 14px;
+  margin-top: 10px;
+  background: rgba(126,184,212,0.07);
+  border: 1px solid rgba(126,184,212,0.18);
+  border-radius: 8px;
+  line-height: 1.55;
+  animation: fadeIn 0.4s ease;
+}
+.verify-note {
+  color: var(--text);
+  font-style: italic;
+  opacity: 0.85;
+}
