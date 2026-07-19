@@ -86,6 +86,7 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 TAVILY_API_KEY    = os.environ.get('TAVILY_API_KEY', '')
 ODDS_API_KEY      = os.environ.get('ODDS_API_KEY', '')
 ADMIN_KEY         = os.environ.get('ADMIN_KEY', 'adminkey123')
+print(f"[WhoWins] ADMIN_KEY={ADMIN_KEY}", flush=True)
 RENDER_API_KEY    = os.environ.get('RENDER_API_KEY', '')
 RENDER_SERVICE_ID = os.environ.get('RENDER_SERVICE_ID', '')
 
