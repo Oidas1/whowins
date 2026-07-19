@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ squad.name }} — WhoWins Squad</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/vs-vegas" class="nav-link">vs Vegas</a>
+    <a href="/plays" class="nav-link">Plays</a>
+    <a href="/leaderboard" class="nav-link">Leaderboard</a>
+    <a href="/journal" class="nav-link">Journal</a>
+    <a href="/logout" class="nav-link">Logout</a>
+  </nav>
+</header>
+
+<main>
+<div class="squad-wrap">
+
+  <div class="squad-header">
+    <div class="squad-icon">⚔️</div>
+    <h1 class="squad-name">{{ squad.name }}</h1>
+    <div class="squad-meta">{{ member_stats|length }} member{{ 's' if member_stats|length != 1 }}</div>
+  </div>
+
+  {% if is_creator %}
+  <div class="squad-invite-box">
+    <div class="squad-invite-label">📨 Invite friends to your squad</div>
+    <input id="joinUrl" type="text" readonly value="{{ join_url }}" class="squad-invite-input">
+    <button onclick="copyJoin()" class="btn-action" style="margin-top:6px">Copy invite link</button>
+    <span id="joinCopied" style="font-size:0.78rem;color:var(--green);margin-left:8px;display:none">Copied!</span>
+  </div>
+  {% endif %}
+
+  <!-- Leaderboard -->
+  <div class="squad-board">
+    {% for m in member_stats %}
+    <div class="squad-row {% if m.is_me %}squad-me{% endif %}">
+      <div class="squad-rank-num">{{ loop.index }}</div>
+      <div class="squad-member-info">
+        <div class="squad-member-name">
+          {{ m.handle }}
+          {% if m.is_me %}<span class="lb-you">you</span>{% endif %}
+        </div>
+        <div class="rank-badge rank-{{ m.rank.tier }}">{{ m.rank.emoji }} {{ m.rank.name }}</div>
+      </div>
+      <div class="squad-bar-wrap">
+        <div class="lb-bar"><div class="lb-fill" style="width:{{ m.rate }}%"></div></div>
+      </div>
+      <div class="squad-stats">
+        <span class="lb-rate {% if m.rate >= 60 %}stat-green{% elif m.rate >= 50 %}stat-gold{% else %}stat-red{% endif %}">{{ m.rate }}%</span>
+        <span class="lb-record">{{ m.wins }}W–{{ m.total - m.wins }}L</span>
+        {% if m.streak >= 3 %}<span class="streak-pill" style="font-size:0.7rem">🔥{{ m.streak }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if not is_member %}
+  <div style="text-align:center;margin-top:24px">
+    <a href="/squad/join/{{ squad.invite_code }}" class="btn-cta-primary">Join this squad</a>
+  </div>
+  {% endif %}
+
+  <div class="squad-footer-links">
+    <a href="/journal">← My Journal</a>
+    <a href="/leaderboard">Global Leaderboard →</a>
+  </div>
+
+</div>
+</main>
+
+<script>
+function copyJoin() {
+  navigator.clipboard.writeText(document.getElementById('joinUrl').value).then(() => {
+    const c = document.getElementById('joinCopied');
+    c.style.display = 'inline';
+    setTimeout(() => { c.style.display = 'none'; }, 2000);
+  });
+}
+</script>
+</body>
+</html>

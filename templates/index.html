@@ -21,6 +21,7 @@
     <a href="/plays" class="nav-link">Plays</a>
     <a href="/leaderboard" class="nav-link">Leaderboard</a>
     <a href="/journal" class="nav-link">Journal</a>
+    <a href="/record" class="nav-link">Record</a>
     <button id="installBtn" onclick="installApp()" class="nav-install-btn" style="display:none">⬇ Install</button>
     <a href="/logout" class="nav-link">Logout</a>
   </nav>
@@ -37,6 +38,10 @@
     </div>
     <button class="disclaimer-close" onclick="dismissDisclaimer()">Got it</button>
   </div>
+
+  <!-- Daily Best Bet + Rank bar -->
+  <div id="dailyBestBet" style="display:none"></div>
+  <div id="myRankBar" style="display:none"></div>
 
   <!-- Mode tabs -->
   <div class="mode-tabs">
@@ -209,6 +214,7 @@
     <div class="result-actions">
       <button class="btn-action btn-new-search" onclick="newSearch()">🔄 New Search</button>
       <button class="btn-action btn-add-slip" id="addSlipBtn" onclick="addToSlip()">➕ Add to Slip</button>
+      <button class="btn-action btn-fade" id="fadeBtn" onclick="fadeScout()" title="Bet against Scout's pick">🔀 Fade Scout</button>
       <button class="btn-action" id="shareBtn" onclick="shareImage()">🖼️ Share Card</button>
       <button class="btn-action" onclick="copyResult()">📋 Copy</button>
       <span class="copied-msg" id="copiedMsg">Copied!</span>

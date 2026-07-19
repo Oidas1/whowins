@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ handle }} — WhoWins</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/record" class="nav-link">Scout's Record</a>
+    {% if is_me %}
+    <a href="/journal" class="nav-link">My Journal</a>
+    <a href="/logout" class="nav-link">Logout</a>
+    {% else %}
+    <a href="/wait" class="nav-link">Join Waitlist</a>
+    {% endif %}
+  </nav>
+</header>
+
+<main>
+<div class="profile-wrap">
+
+  <!-- Profile card -->
+  <div class="profile-card">
+    <div class="profile-avatar">{{ handle[0].upper() }}</div>
+    <div class="profile-info">
+      <div class="profile-handle">@{{ handle }}</div>
+      <div class="rank-badge rank-{{ rank.tier }}">{{ rank.emoji }} {{ rank.name }}</div>
+      {% if streak >= 3 %}
+      <div class="streak-pill">🔥 {{ streak }}-pick win streak</div>
+      {% elif streak <= -3 %}
+      <div class="streak-pill streak-cold">❄️ On a {{ streak|abs }}-pick skid</div>
+      {% endif %}
+    </div>
+    {% if is_me %}
+    <div class="profile-actions">
+      <button class="btn-action" onclick="showHandleModal()">✏️ Edit handle</button>
+      <a href="/api/weekly-recap-image" class="btn-action" download>📥 Weekly card</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Stats row -->
+  <div class="profile-stats">
+    <div class="profile-stat-box">
+      <span class="profile-stat-num {% if rate >= 60 %}stat-green{% elif rate >= 50 %}stat-gold{% else %}stat-red{% endif %}">{{ rate }}%</span>
+      <span class="profile-stat-label">hit rate</span>
+    </div>
+    <div class="profile-stat-box">
+      <span class="profile-stat-num">{{ wins }}–{{ total - wins }}</span>
+      <span class="profile-stat-label">W–L</span>
+    </div>
+    <div class="profile-stat-box">
+      <span class="profile-stat-num">{{ total }}</span>
+      <span class="profile-stat-label">settled picks</span>
+    </div>
+    <div class="profile-stat-box">
+      <span class="profile-stat-num">{{ crew_count }}</span>
+      <span class="profile-stat-label">crew recruited</span>
+    </div>
+  </div>
+
+  <!-- Best picks -->
+  {% if best %}
+  <div class="profile-section">
+    <div class="profile-section-title">Best Calls</div>
+    {% for p in best %}
+    <div class="record-best-card">
+      <span class="sport-tag">{{ p.sport }}</span>
+      <span class="record-best-winner" style="text-transform:capitalize">✓ {{ p.winner }}</span>
+      <span class="record-best-matchup" style="text-transform:capitalize">{{ p.competitor_a }} vs {{ p.competitor_b }}</span>
+      <span class="conf-badge conf-high">High</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Recent picks -->
+  {% if recent %}
+  <div class="profile-section">
+    <div class="profile-section-title">Recent Picks</div>
+    <div class="record-ticker">
+      {% for p in recent %}
+      <div class="record-tick {% if p.outcome == 'win' %}tick-win{% else %}tick-loss{% endif %}">
+        <span class="tick-outcome">{% if p.outcome == 'win' %}✓{% else %}✗{% endif %}</span>
+        <span class="sport-tag">{{ p.sport }}</span>
+        <span class="tick-name" style="text-transform:capitalize">{{ p.winner }}</span>
+        <span class="tick-date">{{ p.created_at.strftime('%b %d') }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not total %}
+  <div class="empty-journal" style="margin-top:24px">
+    <p>No settled picks yet.</p>
+    {% if is_me %}<a href="/" class="btn-new">Run your first prediction →</a>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if not is_me %}
+  <div class="profile-cta">
+    <a href="/wait" class="btn-cta-primary">Get your own Scout account →</a>
+  </div>
+  {% endif %}
+
+</div>
+</main>
+
+{% if is_me %}
+<!-- Handle modal -->
+<div id="handleModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeHandleModal()">
+  <div class="modal-card">
+    <div class="modal-title">Set your public handle</div>
+    <p class="modal-sub">Your profile URL will be whowins.onrender.com/u/<strong id="handlePreview">yourhandle</strong></p>
+    <input id="handleInput" type="text" class="wait-input" placeholder="yourhandle"
+      oninput="document.getElementById('handlePreview').textContent=this.value||'yourhandle'"
+      style="margin-bottom:12px">
+    <div id="handleError" style="color:var(--red);font-size:0.82rem;min-height:18px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn-cta-primary" onclick="saveHandle()">Save handle</button>
+      <button class="btn-action" onclick="closeHandleModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+<script>
+function showHandleModal() { document.getElementById('handleModal').style.display='flex'; }
+function closeHandleModal() { document.getElementById('handleModal').style.display='none'; }
+async function saveHandle() {
+  const h = document.getElementById('handleInput').value.trim().toLowerCase();
+  const err = document.getElementById('handleError');
+  err.textContent = '';
+  if (!h) { err.textContent = 'Enter a handle'; return; }
+  const res = await fetch('/api/set-handle', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({handle: h})
+  });
+  const d = await res.json();
+  if (d.error) { err.textContent = d.error; return; }
+  window.location = '/u/' + h;
+}
+</script>
+{% endif %}
+</body>
+</html>

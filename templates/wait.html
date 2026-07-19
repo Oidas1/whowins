@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Join the Waitlist</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/record" class="nav-link">Scout's Record</a>
+    <a href="/wait" class="nav-link active">Waitlist</a>
+  </nav>
+</header>
+
+<main>
+<div class="wait-wrap">
+
+  {% if submitted %}
+  <div class="wait-success">
+    <div class="wait-success-icon">✓</div>
+    <h1 class="wait-title">You're on the list.</h1>
+    <p class="wait-sub">We'll reach out when a spot opens. Until then, check Scout's live record.</p>
+    <div class="wait-count-pill">{{ count }} people ahead of you</div>
+    <a href="/record" class="btn-cta-primary" style="margin-top:28px">See Scout's record →</a>
+  </div>
+  {% else %}
+  <div class="wait-hero">
+    <div class="wait-lock-icon">🔒</div>
+    <h1 class="wait-title">WhoWins is invite-only.</h1>
+    <p class="wait-sub">
+      An AI predictor that beats Vegas. Tracks your record. Finds value plays on Polymarket and Kalshi.<br>
+      Access is limited — drop your email and we'll let you in when a spot opens.
+    </p>
+
+    <div class="wait-stats-row">
+      <div class="wait-stat"><span class="wait-stat-num">{{ count }}+</span><span class="wait-stat-label">on waitlist</span></div>
+      <div class="wait-stat"><span class="wait-stat-num">24/7</span><span class="wait-stat-label">live picks</span></div>
+      <div class="wait-stat"><span class="wait-stat-num">12+</span><span class="wait-stat-label">sports covered</span></div>
+    </div>
+
+    <form class="wait-form" method="POST" action="/wait">
+      <input type="email" name="email" placeholder="your@email.com" required class="wait-input" autofocus>
+      <button type="submit" class="btn-cta-primary wait-btn">Claim my spot →</button>
+    </form>
+
+    <p class="wait-fine">No spam. One email when you're in.</p>
+
+    <div class="wait-features">
+      <div class="wait-feature">🎯 AI analysis across 12+ sports</div>
+      <div class="wait-feature">📊 Beats Vegas on settled picks</div>
+      <div class="wait-feature">💡 Daily value plays from prediction markets</div>
+      <div class="wait-feature">🏆 Leaderboard & squad competition</div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+</main>
+</body>
+</html>

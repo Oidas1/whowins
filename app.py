@@ -11,7 +11,8 @@ import io
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, Response, stream_with_context, session, redirect, url_for, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func
+from sqlalchemy import func, text
+import random
 import anthropic
 import urllib.request
 import urllib.parse
@@ -96,7 +97,8 @@ class UserProfile(db.Model):
     __tablename__ = 'ww_users'
     id          = db.Column(db.Integer, primary_key=True)
     user_uid    = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    referred_by = db.Column(db.String(64), nullable=True)   # uid of referrer
+    referred_by = db.Column(db.String(64), nullable=True)
+    handle      = db.Column(db.String(50), unique=True, nullable=True, index=True)
     first_seen  = db.Column(db.DateTime, default=datetime.utcnow)
     last_seen   = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -133,11 +135,46 @@ class Query(db.Model):
     a_odds_pct     = db.Column(db.Float, nullable=True)     # Vegas implied % for comp_a
     b_odds_pct     = db.Column(db.Float, nullable=True)     # Vegas implied % for comp_b
     is_upset_alert = db.Column(db.Boolean, default=False)
+    is_fade        = db.Column(db.Boolean, default=False)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Waitlist(db.Model):
+    __tablename__ = 'ww_waitlist'
+    id         = db.Column(db.Integer, primary_key=True)
+    email      = db.Column(db.String(200), unique=True, nullable=False)
+    source     = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Squad(db.Model):
+    __tablename__ = 'ww_squads'
+    id          = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(100), nullable=False)
+    invite_code = db.Column(db.String(20), unique=True, nullable=False)
+    created_by  = db.Column(db.String(64), nullable=False)
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SquadMember(db.Model):
+    __tablename__ = 'ww_squad_members'
+    id        = db.Column(db.Integer, primary_key=True)
+    squad_id  = db.Column(db.Integer, db.ForeignKey('ww_squads.id'), nullable=False)
+    user_uid  = db.Column(db.String(64), nullable=False, index=True)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint('squad_id', 'user_uid'),)
 
 with app.app_context():
     try:
         db.create_all()
+        # Column migrations for existing tables (ADD COLUMN IF NOT EXISTS is Postgres-safe)
+        try:
+            with db.engine.connect() as conn:
+                for stmt in [
+                    "ALTER TABLE ww_users   ADD COLUMN IF NOT EXISTS handle  VARCHAR(50) UNIQUE",
+                    "ALTER TABLE ww_queries ADD COLUMN IF NOT EXISTS is_fade BOOLEAN DEFAULT FALSE",
+                ]:
+                    conn.execute(text(stmt))
+                conn.commit()
+        except Exception:
+            pass
         # Load a stable SECRET_KEY from DB so sessions survive every server restart
         # and every SITE_PASSWORD rotation (which triggers a Render redeploy).
         try:
@@ -174,6 +211,61 @@ def get_display_name(uid):
     noun = _NOUNS[(h // len(_ADJS)) % len(_NOUNS)]
     num  = h % 9000 + 1000
     return f"{adj}{noun}#{num}"
+
+# ── Rank / streak / stats helpers ─────────────────────────────────────────────
+
+def _get_rank(wins, rate, total):
+    if total < 5:
+        return {'name': 'Rookie', 'emoji': '🎯', 'tier': 'rookie',
+                'progress': total, 'next_at': 5, 'next_name': 'Sharp'}
+    score = wins * max(0, (rate - 45)) / 10.0
+    if score >= 30:
+        return {'name': 'Legend', 'emoji': '👑', 'tier': 'legend', 'score': round(score, 1)}
+    elif score >= 12:
+        return {'name': 'Elite',  'emoji': '🔥', 'tier': 'elite',  'score': round(score, 1),
+                'next_at': 30, 'next_name': 'Legend'}
+    elif score >= 4:
+        return {'name': 'Sharp',  'emoji': '⚡', 'tier': 'sharp',  'score': round(score, 1),
+                'next_at': 12, 'next_name': 'Elite'}
+    else:
+        return {'name': 'Rookie', 'emoji': '🎯', 'tier': 'rookie', 'score': round(score, 1),
+                'next_at': 4,  'next_name': 'Sharp'}
+
+def _calc_streak(uid):
+    """Positive = win streak length, negative = loss streak length, 0 = no data."""
+    recent = Query.query.filter(
+        Query.user_uid == uid,
+        Query.outcome.in_(['win', 'loss']),
+        Query.is_fade == False  # noqa: E712
+    ).order_by(Query.created_at.desc()).limit(20).all()
+    if not recent:
+        return 0
+    first, count = recent[0].outcome, 0
+    for q in recent:
+        if q.outcome == first: count += 1
+        else: break
+    return count if first == 'win' else -count
+
+def _user_stats(uid):
+    """Returns (wins, total_settled, hit_rate_pct) ignoring fade picks."""
+    settled = Query.query.filter(
+        Query.user_uid == uid,
+        Query.outcome.in_(['win', 'loss']),
+        Query.is_fade == False  # noqa: E712
+    ).all()
+    total = len(settled)
+    wins  = sum(1 for q in settled if q.outcome == 'win')
+    rate  = round(wins / total * 100) if total else 0
+    return wins, total, rate
+
+def _value_edge(q):
+    """Percentage points by which Scout's chosen-side probability exceeded the market."""
+    if not q.a_odds_pct or not q.winner or not q.competitor_a:
+        return 0
+    winner_is_a = q.winner.lower() in q.competitor_a.lower()
+    scout = (q.ai_a_pct if winner_is_a else q.ai_b_pct) or 0
+    mkt   = (q.a_odds_pct if winner_is_a else q.b_odds_pct) or 0
+    return abs(scout - mkt)
 
 # ── Events cache ──────────────────────────────────────────────────────────────
 
@@ -426,6 +518,12 @@ def journal_outcome(entry_id):
         return jsonify({'error': 'Invalid'}), 400
     entry.outcome = outcome
     db.session.commit()
+    # Check if marking a win created a notable streak — pass it to journal for modal
+    streak = 0
+    if outcome == 'win':
+        streak = _calc_streak(entry.user_uid)
+    if streak >= 5:
+        return redirect(url_for('journal', streak=streak))
     return redirect(url_for('journal'))
 
 @app.route('/journal/delete/<int:entry_id>', methods=['POST'])
@@ -1939,6 +2037,107 @@ def _pil_font(size, bold=True):
             continue
     return ImageFont.load_default()
 
+def generate_weekly_recap_card(uid):
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    picks = Query.query.filter(
+        Query.user_uid == uid,
+        Query.created_at >= week_ago,
+        Query.outcome.in_(['win', 'loss']),
+        Query.is_fade == False  # noqa: E712
+    ).order_by(Query.created_at.asc()).all()
+    wins   = sum(1 for p in picks if p.outcome == 'win')
+    losses = len(picks) - wins
+    rate   = round(wins / len(picks) * 100) if picks else 0
+    best   = next((p for p in reversed(picks) if p.outcome == 'win' and p.confidence == 'High'),
+                   next((p for p in reversed(picks) if p.outcome == 'win'), None))
+    streak = _calc_streak(uid)
+
+    W, H    = 1200, 630
+    BG      = (20, 18, 15);  SURFACE = (31, 28, 23);  BORDER = (58, 53, 42)
+    BLUE    = (126, 184, 212); TEXT   = (237, 232, 224); MUTED  = (140, 132, 121)
+    GREEN   = (107, 178, 130); RED    = (210, 100, 90);  GOLD   = (212, 180, 100)
+
+    img  = Image.new('RGB', (W, H), BG)
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle([40, 40, W-40, H-40], radius=24, fill=SURFACE, outline=BORDER, width=2)
+
+    draw.text((80, 68), "WhoWins · Weekly Recap", font=_pil_font(26, bold=False), fill=MUTED)
+
+    rec_font = _pil_font(130)
+    rec_text = f"{wins}–{losses}"
+    rb = draw.textbbox((0,0), rec_text, font=rec_font)
+    draw.text((W//2 - (rb[2]-rb[0])//2, 110), rec_text, font=rec_font, fill=TEXT)
+
+    rate_text  = f"{rate}% hit rate this week"
+    rate_color = GREEN if rate >= 60 else (GOLD if rate >= 50 else RED)
+    rt = _pil_font(40)
+    rb2 = draw.textbbox((0,0), rate_text, font=rt)
+    draw.text((W//2 - (rb2[2]-rb2[0])//2, 305), rate_text, font=rt, fill=rate_color)
+
+    if best:
+        draw.text((80, 390), "BEST CALL", font=_pil_font(20, bold=False), fill=MUTED)
+        loser = (best.competitor_b if best.competitor_a and best.winner and best.winner.lower() in best.competitor_a.lower() else best.competitor_a) or ''
+        best_text = f"✓ {best.winner}  over  {loser}".strip()
+        if draw.textbbox((0,0), best_text, font=_pil_font(34))[2] > W-160:
+            best_text = f"✓ {best.winner}"
+        draw.text((80, 420), best_text, font=_pil_font(34), fill=GREEN)
+        if best.sport:
+            st = best.sport.upper()
+            sb = draw.textbbox((0,0), st, font=_pil_font(20))
+            draw.rounded_rectangle([W-180, 390, W-60, 470], radius=18, fill=BORDER)
+            draw.text((W-120 - (sb[2]-sb[0])//2, 420), st, font=_pil_font(20), fill=MUTED)
+
+    if streak >= 3:
+        draw.text((80, 505), f"🔥 On a {streak}-pick win streak", font=_pil_font(26), fill=GOLD)
+
+    url_text = "whowins.onrender.com"
+    ub = draw.textbbox((0,0), url_text, font=_pil_font(22, bold=False))
+    draw.text((W//2 - (ub[2]-ub[0])//2, 576), url_text, font=_pil_font(22, bold=False), fill=MUTED)
+
+    buf = io.BytesIO()
+    img.save(buf, format='PNG', optimize=True)
+    buf.seek(0)
+    return buf
+
+
+def generate_streak_card(streak, recent_picks):
+    W, H    = 1200, 630
+    BG      = (20, 18, 15);  SURFACE = (31, 28, 23)
+    TEXT    = (237, 232, 224); MUTED  = (140, 132, 121)
+    GREEN   = (107, 178, 130); GOLD   = (212, 180, 100)
+
+    img  = Image.new('RGB', (W, H), BG)
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle([40, 40, W-40, H-40], radius=24, fill=SURFACE, outline=GOLD, width=3)
+
+    fires = '🔥' * min(streak, 8)
+    draw.text((80, 68), fires, font=_pil_font(40), fill=GOLD)
+
+    num_font = _pil_font(160)
+    nb = draw.textbbox((0,0), str(streak), font=num_font)
+    draw.text((W//2 - (nb[2]-nb[0])//2, 95), str(streak), font=num_font, fill=GOLD)
+
+    lbl = f"pick win streak with Scout"
+    lb  = draw.textbbox((0,0), lbl, font=_pil_font(42))
+    draw.text((W//2 - (lb[2]-lb[0])//2, 315), lbl, font=_pil_font(42), fill=TEXT)
+
+    pf = _pil_font(26, bold=False)
+    y  = 394
+    for p in recent_picks[:4]:
+        txt = f"✓  {p.winner}  ·  {p.sport or ''}"
+        draw.text((W//2 - 220, y), txt, font=pf, fill=GREEN)
+        y += 42
+
+    cta = "who wins next?  whowins.onrender.com"
+    cb  = draw.textbbox((0,0), cta, font=_pil_font(24, bold=False))
+    draw.text((W//2 - (cb[2]-cb[0])//2, 570), cta, font=_pil_font(24, bold=False), fill=MUTED)
+
+    buf = io.BytesIO()
+    img.save(buf, format='PNG', optimize=True)
+    buf.seek(0)
+    return buf
+
+
 def generate_share_image(comp1, comp2, sport, a_pct, b_pct, winner, confidence, reason=''):
     W, H = 1200, 630
     BG       = (20, 18, 15)
@@ -2302,6 +2501,305 @@ def share_image():
         reason=data.get('reason', ''),
     )
     return send_file(buf, mimetype='image/png', download_name='whowins-prediction.png')
+
+# ── Public record page ────────────────────────────────────────────────────────
+
+@app.route('/record')
+def public_record():
+    settled = Query.query.filter(
+        Query.outcome.in_(['win', 'loss']),
+        Query.is_fade == False  # noqa: E712
+    ).all()
+    total = len(settled)
+    wins  = sum(1 for q in settled if q.outcome == 'win')
+    rate  = round(wins / total * 100) if total else 0
+
+    sport_map = {}
+    for q in settled:
+        s = (q.sport or 'other').split()[0].lower()
+        sport_map.setdefault(s, {'wins': 0, 'total': 0})
+        sport_map[s]['total'] += 1
+        if q.outcome == 'win': sport_map[s]['wins'] += 1
+    for s, st in sport_map.items():
+        st['rate'] = round(st['wins'] / st['total'] * 100) if st['total'] else 0
+    sport_list = sorted(sport_map.items(), key=lambda x: -x[1]['total'])[:8]
+
+    best_picks = Query.query.filter_by(outcome='win', confidence='High')\
+        .order_by(Query.created_at.desc()).limit(6).all()
+    recent_activity = Query.query.filter(Query.outcome.in_(['win', 'loss']))\
+        .order_by(Query.created_at.desc()).limit(12).all()
+
+    odds_picks = Query.query.filter(
+        Query.outcome.in_(['win', 'loss']),
+        Query.a_odds_pct.isnot(None),
+        Query.is_fade == False  # noqa: E712
+    ).all()
+    vegas_wins = sum(1 for q in odds_picks
+        if (q.winner and q.competitor_a and q.winner.lower() in q.competitor_a.lower()
+            and q.a_odds_pct and q.a_odds_pct >= 50 and q.outcome == 'win')
+        or (q.winner and q.competitor_a and q.winner.lower() not in q.competitor_a.lower()
+            and q.b_odds_pct and q.b_odds_pct >= 50 and q.outcome == 'win'))
+    vegas_rate = round(vegas_wins / len(odds_picks) * 100) if odds_picks else None
+
+    vp = [q for q in odds_picks if _value_edge(q) >= 10]
+    vw = sum(1 for q in vp if q.outcome == 'win')
+    value_rate = round(vw / len(vp) * 100) if vp else None
+
+    return render_template('record.html',
+        total=total, wins=wins, rate=rate,
+        sport_list=sport_list, best_picks=best_picks,
+        recent_activity=recent_activity,
+        vegas_rate=vegas_rate, odds_count=len(odds_picks),
+        value_rate=value_rate, value_count=len(vp),
+    )
+
+
+# ── Waitlist ──────────────────────────────────────────────────────────────────
+
+@app.route('/wait', methods=['GET', 'POST'])
+def waitlist_page():
+    submitted = False
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        if email and '@' in email and '.' in email.split('@')[-1]:
+            if not Waitlist.query.filter_by(email=email).first():
+                db.session.add(Waitlist(email=email, source=request.args.get('ref')))
+                db.session.commit()
+            submitted = True
+    count = Waitlist.query.count()
+    return render_template('wait.html', submitted=submitted, count=count)
+
+@app.route('/admin/waitlist')
+def admin_waitlist():
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    entries = Waitlist.query.order_by(Waitlist.created_at.desc()).all()
+    return jsonify([{'email': e.email, 'source': e.source,
+                     'created_at': e.created_at.isoformat()} for e in entries])
+
+
+# ── Public profile ────────────────────────────────────────────────────────────
+
+@app.route('/u/<handle>')
+def public_profile(handle):
+    profile = UserProfile.query.filter(
+        func.lower(UserProfile.handle) == handle.lower()
+    ).first_or_404()
+    uid = profile.user_uid
+    wins, total, rate = _user_stats(uid)
+    rank   = _get_rank(wins, rate, total)
+    streak = _calc_streak(uid)
+    recent = Query.query.filter(
+        Query.user_uid == uid,
+        Query.outcome.in_(['win', 'loss']),
+        Query.is_fade == False  # noqa: E712
+    ).order_by(Query.created_at.desc()).limit(8).all()
+    best = Query.query.filter_by(user_uid=uid, outcome='win', confidence='High')\
+        .order_by(Query.created_at.desc()).limit(3).all()
+    crew_count = UserProfile.query.filter_by(referred_by=uid).count()
+    is_me = is_authed() and session.get('user_uid') == uid
+    return render_template('profile.html',
+        handle=handle, profile=profile,
+        wins=wins, total=total, rate=rate,
+        rank=rank, streak=streak, recent=recent, best=best,
+        crew_count=crew_count, is_me=is_me,
+    )
+
+@app.route('/api/set-handle', methods=['POST'])
+def set_handle():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    handle = (request.get_json() or {}).get('handle', '').strip().lower()
+    if not handle or len(handle) < 3 or len(handle) > 30:
+        return jsonify({'error': 'Handle must be 3–30 characters'}), 400
+    if not re.match(r'^[a-z0-9_]+$', handle):
+        return jsonify({'error': 'Only letters, numbers, and underscores'}), 400
+    uid = get_user_uid()
+    clash = UserProfile.query.filter(
+        func.lower(UserProfile.handle) == handle,
+        UserProfile.user_uid != uid
+    ).first()
+    if clash:
+        return jsonify({'error': 'Handle already taken'}), 409
+    p = UserProfile.query.filter_by(user_uid=uid).first()
+    if p:
+        p.handle = handle
+        db.session.commit()
+    profile_url = url_for('public_profile', handle=handle, _external=True)
+    return jsonify({'success': True, 'handle': handle, 'url': profile_url})
+
+
+# ── Image endpoints ───────────────────────────────────────────────────────────
+
+@app.route('/api/weekly-recap-image')
+def weekly_recap_image():
+    if not is_authed():
+        return 'Unauthorized', 401
+    buf = generate_weekly_recap_card(get_user_uid())
+    return send_file(buf, mimetype='image/png',
+                     download_name='whowins-weekly-recap.png', as_attachment=True)
+
+@app.route('/api/streak-image')
+def streak_image_route():
+    if not is_authed():
+        return 'Unauthorized', 401
+    uid    = get_user_uid()
+    streak = _calc_streak(uid)
+    if streak < 1:
+        return jsonify({'error': 'No active win streak'}), 400
+    recent = Query.query.filter(
+        Query.user_uid == uid, Query.outcome == 'win',
+        Query.is_fade == False  # noqa: E712
+    ).order_by(Query.created_at.desc()).limit(streak).all()
+    buf = generate_streak_card(streak, recent)
+    return send_file(buf, mimetype='image/png',
+                     download_name=f'whowins-streak-{streak}.png', as_attachment=True)
+
+
+# ── My stats / invite / crew ──────────────────────────────────────────────────
+
+@app.route('/api/my-stats')
+def my_stats():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    uid   = get_user_uid()
+    wins, total, rate = _user_stats(uid)
+    streak = _calc_streak(uid)
+    rank   = _get_rank(wins, rate, total)
+    crew   = UserProfile.query.filter_by(referred_by=uid).count()
+    p      = UserProfile.query.filter_by(user_uid=uid).first()
+    invite = url_for('login', ref=uid, _external=True)
+    profile_url = url_for('public_profile', handle=p.handle, _external=True) if p and p.handle else None
+    vp = Query.query.filter(
+        Query.user_uid == uid, Query.outcome.in_(['win','loss']),
+        Query.a_odds_pct.isnot(None), Query.is_fade == False  # noqa: E712
+    ).all()
+    vp_edge = [q for q in vp if _value_edge(q) >= 10]
+    vw = sum(1 for q in vp_edge if q.outcome == 'win')
+    return jsonify({
+        'wins': wins, 'total': total, 'rate': rate,
+        'streak': streak, 'rank': rank, 'crew': crew,
+        'invite_url': invite, 'profile_url': profile_url,
+        'handle': p.handle if p else None,
+        'value_rate': round(vw / len(vp_edge) * 100) if vp_edge else None,
+        'value_count': len(vp_edge),
+    })
+
+
+# ── Fade Scout ────────────────────────────────────────────────────────────────
+
+@app.route('/api/fade', methods=['POST'])
+def fade_pick():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    d   = request.get_json() or {}
+    uid = get_user_uid()
+    entry = Query(
+        user_uid     = uid,
+        sport        = d.get('sport', ''),
+        competitor_a = d.get('comp1', ''),
+        competitor_b = d.get('comp2', ''),
+        winner       = d.get('fade_winner', ''),
+        confidence   = d.get('confidence', 'Medium'),
+        analysis     = '',
+        ai_a_pct     = d.get('b_pct'),
+        ai_b_pct     = d.get('a_pct'),
+        a_odds_pct   = d.get('a_odds_pct'),
+        b_odds_pct   = d.get('b_odds_pct'),
+        is_fade      = True,
+    )
+    db.session.add(entry)
+    db.session.commit()
+    return jsonify({'success': True, 'id': entry.id})
+
+@app.route('/api/fade-stats')
+def fade_stats():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    uid  = get_user_uid()
+    fades = Query.query.filter(
+        Query.user_uid == uid,
+        Query.outcome.in_(['win', 'loss']),
+        Query.is_fade == True  # noqa: E712
+    ).all()
+    total = len(fades)
+    wins  = sum(1 for f in fades if f.outcome == 'win')
+    return jsonify({'total': total, 'wins': wins,
+                    'rate': round(wins / total * 100) if total else None})
+
+
+# ── Squad ─────────────────────────────────────────────────────────────────────
+
+@app.route('/squad/create', methods=['POST'])
+def squad_create():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    name = (request.get_json() or {}).get('name', '').strip()
+    if not name or len(name) > 50:
+        return jsonify({'error': 'Name must be 1–50 characters'}), 400
+    uid   = get_user_uid()
+    code  = secrets.token_urlsafe(6)
+    squad = Squad(name=name, invite_code=code, created_by=uid)
+    db.session.add(squad)
+    db.session.flush()
+    db.session.add(SquadMember(squad_id=squad.id, user_uid=uid))
+    db.session.commit()
+    return jsonify({'success': True, 'squad_id': squad.id, 'invite_code': code,
+                    'url': url_for('squad_page', squad_id=squad.id, _external=True)})
+
+@app.route('/squad/join/<code>')
+def squad_join(code):
+    if not is_authed():
+        session['after_login'] = request.url
+        return redirect(url_for('login'))
+    uid   = get_user_uid()
+    squad = Squad.query.filter_by(invite_code=code).first_or_404()
+    if not SquadMember.query.filter_by(squad_id=squad.id, user_uid=uid).first():
+        db.session.add(SquadMember(squad_id=squad.id, user_uid=uid))
+        db.session.commit()
+    return redirect(url_for('squad_page', squad_id=squad.id))
+
+@app.route('/squad/<int:squad_id>')
+def squad_page(squad_id):
+    if not is_authed():
+        return redirect(url_for('login'))
+    squad  = Squad.query.get_or_404(squad_id)
+    uid    = get_user_uid()
+    is_member  = SquadMember.query.filter_by(squad_id=squad_id, user_uid=uid).first() is not None
+    members    = SquadMember.query.filter_by(squad_id=squad_id).all()
+    member_stats = []
+    for m in members:
+        p = UserProfile.query.filter_by(user_uid=m.user_uid).first()
+        w, t, r = _user_stats(m.user_uid)
+        member_stats.append({
+            'handle': (p.handle if p and p.handle else get_display_name(m.user_uid)),
+            'wins': w, 'total': t, 'rate': r,
+            'streak': _calc_streak(m.user_uid),
+            'rank': _get_rank(w, r, t),
+            'is_me': m.user_uid == uid,
+        })
+    member_stats.sort(key=lambda x: (-x['rate'], -x['wins']))
+    join_url = url_for('squad_join', code=squad.invite_code, _external=True)
+    return render_template('squad.html',
+        squad=squad, is_member=is_member,
+        member_stats=member_stats, join_url=join_url,
+        is_creator=(squad.created_by == uid),
+    )
+
+@app.route('/api/my-squads')
+def my_squads():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    uid       = get_user_uid()
+    membships = SquadMember.query.filter_by(user_uid=uid).all()
+    result    = []
+    for ms in membships:
+        sq = Squad.query.get(ms.squad_id)
+        if sq:
+            result.append({'id': sq.id, 'name': sq.name,
+                           'member_count': SquadMember.query.filter_by(squad_id=sq.id).count()})
+    return jsonify(result)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

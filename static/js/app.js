@@ -17,6 +17,8 @@ window.addEventListener('DOMContentLoaded', () => {
   loadAccuracy();
   loadTrending();
   loadEvents();
+  loadIndexRankBar();
+  loadDailyBestBet();
   if (localStorage.getItem('ww_disclaimer') === 'dismissed') {
     const b = document.getElementById('disclaimerBanner');
     if (b) b.style.display = 'none';
@@ -780,6 +782,95 @@ function renderOdds(odds, prediction) {
 
   const actions = document.querySelector('.result-actions');
   actions.parentNode.insertBefore(div, actions);
+}
+
+// ── Fade Scout ────────────────────────────────────
+
+async function fadeScout() {
+  if (!resultData || !resultData.winner) return;
+  const btn = document.getElementById('fadeBtn');
+  // Determine the fade target (the one Scout said would LOSE)
+  const aWins = resultData.winner.toLowerCase().includes(currentComp1.split(' ')[0].toLowerCase()) ||
+                currentComp1.toLowerCase().includes(resultData.winner.split(' ')[0].toLowerCase());
+  const fadeWinner = aWins ? currentComp2 : currentComp1;
+  const fadePct    = aWins ? resultData.bPct : resultData.aPct;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Saving fade…';
+  try {
+    const res = await fetch('/api/fade', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        sport: currentSport, comp1: currentComp1, comp2: currentComp2,
+        fade_winner: fadeWinner, fade_pct: fadePct,
+        a_pct: resultData.aPct, b_pct: resultData.bPct,
+        confidence: resultData.confidence,
+      }),
+    });
+    const d = await res.json();
+    if (d.success) {
+      btn.textContent = '✓ Fade saved';
+      btn.style.color = 'var(--green)';
+      const note = document.createElement('div');
+      note.className = 'fade-confirm';
+      note.textContent = `Fading Scout — backing ${fadeWinner} (${fadePct}%). Mark result in Journal.`;
+      btn.parentNode.insertBefore(note, btn.nextSibling);
+    }
+  } catch (_) {
+    btn.disabled = false;
+    btn.textContent = '🔀 Fade Scout';
+  }
+}
+
+// ── Index page rank bar + daily best bet ──────────
+
+async function loadIndexRankBar() {
+  try {
+    const d = await (await fetch('/api/my-stats')).json();
+    if (d.error) return;
+    const TIER_COL = {legend:'#d4b464', elite:'#FF6B35', sharp:'#7eb8d4', rookie:'#8c8479'};
+    const col = TIER_COL[d.rank?.tier] || '#8c8479';
+    const streak = d.streak >= 3 ? ` &nbsp;🔥 ${d.streak}-streak` : '';
+    const el = document.getElementById('myRankBar');
+    if (!el) return;
+    el.style.display = 'block';
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+                  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+                  padding:9px 14px;margin-bottom:12px;font-size:0.8rem;">
+        <span>
+          <span class="rank-badge rank-${d.rank?.tier}" style="color:${col}">${d.rank?.emoji} ${d.rank?.name}</span>
+          <span style="color:var(--muted);margin-left:8px">${d.wins}W–${d.total-d.wins}L · ${d.rate}%${streak}</span>
+        </span>
+        <span style="display:flex;gap:8px">
+          ${d.profile_url ? `<a href="${d.profile_url}" style="color:var(--accent);text-decoration:none;font-size:0.78rem">👤 Profile</a>` : ''}
+          <a href="/journal" style="color:var(--muted);text-decoration:none;font-size:0.78rem">Journal →</a>
+        </span>
+      </div>`;
+  } catch (_) {}
+}
+
+async function loadDailyBestBet() {
+  try {
+    const res  = await fetch('/api/plays?limit=1');
+    const data = await res.json();
+    const plays = data.plays || [];
+    if (!plays.length) return;
+    const top = plays[0];
+    if (!top || !top.edge || Math.abs(top.edge) < 6) return;
+    const el = document.getElementById('dailyBestBet');
+    if (!el) return;
+    const sign = top.edge > 0 ? '+' : '';
+    el.style.display = 'block';
+    el.innerHTML = `
+      <div class="daily-best-bet">
+        <span class="dbb-label">🎯 Scout's Best Bet</span>
+        <span class="dbb-question">${top.question}</span>
+        <span class="dbb-edge">${sign}${top.edge}pp edge</span>
+        <a class="dbb-link" href="/plays">See all plays →</a>
+      </div>`;
+  } catch (_) {}
 }
 
 async function saveToJournal(sport, comp1, comp2, analysis, prediction, odds) {

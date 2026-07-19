@@ -95,6 +95,9 @@
     {% set total   = entries|length %}
     {% set settled = wins + losses %}
 
+    <!-- Rank + streak + actions bar (loaded via JS) -->
+    <div id="journalRankBar"></div>
+
     <!-- Stats -->
     <div class="journal-stats">
       <div class="stat-box">
@@ -221,8 +224,25 @@
     </div>
     {% endif %}
 
+    <!-- Squad section -->
+    <div id="squadSection" style="margin-top:32px"></div>
+
   </div>
 </main>
+
+<!-- Streak modal -->
+<div id="streakModal" class="modal-overlay" style="display:none">
+  <div class="modal-card streak-modal-card">
+    <div id="streakModalFires" class="streak-modal-fires"></div>
+    <div id="streakModalNum" class="streak-modal-num"></div>
+    <div class="streak-modal-label">pick win streak 🔥</div>
+    <div id="streakModalPicks" class="streak-modal-picks"></div>
+    <div class="streak-modal-actions">
+      <a id="streakCardLink" href="/api/streak-image" download class="btn-cta-primary">📥 Download streak card</a>
+      <button class="btn-action" onclick="document.getElementById('streakModal').style.display='none'">Close</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const PAGE_SIZE = 20;
@@ -263,10 +283,108 @@ function showMore() {
 // Initial pagination
 window.addEventListener('DOMContentLoaded', () => {
   const cards = allCards();
-  if (cards.length > PAGE_SIZE) {
-    applyFilter();
-  }
+  if (cards.length > PAGE_SIZE) { applyFilter(); }
+  loadRankBar();
+  loadSquads();
+  checkStreakModal();
 });
+
+async function loadRankBar() {
+  try {
+    const d = await (await fetch('/api/my-stats')).json();
+    if (d.error) return;
+    const TIER_COL = {legend:'#FFD700', elite:'#FF6B35', sharp:'#7EB8D4', rookie:'#888'};
+    const col = TIER_COL[d.rank.tier] || '#888';
+    const streak = d.streak >= 3 ? `<span class="streak-pill" style="margin-left:8px">🔥 ${d.streak}-pick streak</span>` : '';
+    const fadeNote = d.streak <= -3 ? `<span class="streak-pill streak-cold" style="margin-left:8px">❄️ ${Math.abs(d.streak)}-loss skid</span>` : '';
+    const handle  = d.handle ? `<a href="/u/${d.handle}" class="rank-profile-link">@${d.handle}</a>` : `<button class="rank-profile-link" onclick="showHandlePrompt()">Set handle</button>`;
+    const crew    = d.crew > 0 ? `<span class="crew-count">👥 ${d.crew} recruited</span>` : '';
+    let recapBtn  = `<a href="/api/weekly-recap-image" download class="btn-action" style="font-size:0.78rem">📥 Weekly card</a>`;
+    let profileLink = d.profile_url ? `<a href="${d.profile_url}" class="btn-action" style="font-size:0.78rem" target="_blank">👤 My profile</a>` : `<button class="btn-action" style="font-size:0.78rem" onclick="showHandlePrompt()">👤 Create profile</button>`;
+    document.getElementById('journalRankBar').innerHTML = `
+      <div class="journal-rank-bar">
+        <div class="rank-bar-left">
+          <span class="rank-badge rank-${d.rank.tier}" style="color:${col}">${d.rank.emoji} ${d.rank.name}</span>
+          ${handle}${crew}${streak}${fadeNote}
+        </div>
+        <div class="rank-bar-right">
+          ${recapBtn}
+          ${profileLink}
+          <button class="btn-action" style="font-size:0.78rem" onclick="copyInvite('${d.invite_url}')">🔗 Invite</button>
+        </div>
+      </div>
+    `;
+  } catch (_) {}
+}
+
+async function loadSquads() {
+  try {
+    const squads = await (await fetch('/api/my-squads')).json();
+    const el = document.getElementById('squadSection');
+    if (!squads.length) {
+      el.innerHTML = `<div class="below-label">⚔️ Squads</div>
+        <div class="squad-empty">
+          <p>You're not in a squad yet. Create one or get an invite link from a friend.</p>
+          <button class="btn-action" onclick="createSquad()">Create a squad</button>
+        </div>`;
+    } else {
+      const rows = squads.map(s =>
+        `<a href="/squad/${s.id}" class="squad-mini-card">
+          <span class="squad-mini-name">⚔️ ${s.name}</span>
+          <span class="squad-mini-count">${s.member_count} members</span>
+        </a>`).join('');
+      el.innerHTML = `<div class="below-label">⚔️ My Squads</div><div class="squad-mini-list">${rows}</div>
+        <button class="btn-action" style="margin-top:8px;font-size:0.8rem" onclick="createSquad()">+ New squad</button>`;
+    }
+  } catch (_) {}
+}
+
+async function createSquad() {
+  const name = prompt('Squad name:');
+  if (!name) return;
+  const res = await fetch('/squad/create', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  const d = await res.json();
+  if (d.url) window.location = d.url;
+}
+
+function copyInvite(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+  });
+}
+
+function showHandlePrompt() {
+  const h = prompt('Choose your public handle (letters, numbers, underscores):');
+  if (!h) return;
+  fetch('/api/set-handle', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({handle:h.toLowerCase()})})
+    .then(r=>r.json()).then(d => {
+      if (d.error) { alert(d.error); return; }
+      window.location = '/u/' + d.handle;
+    });
+}
+
+function checkStreakModal() {
+  const params = new URLSearchParams(window.location.search);
+  const streak = parseInt(params.get('streak') || '0');
+  if (streak >= 5) { showStreakModal(streak); }
+}
+
+function showStreakModal(streak) {
+  document.getElementById('streakModalFires').textContent = '🔥'.repeat(Math.min(streak, 8));
+  document.getElementById('streakModalNum').textContent   = streak;
+  document.getElementById('streakCardLink').href = `/api/streak-image`;
+  const recentCards = Array.from(document.querySelectorAll('.journal-card.card-win')).slice(0, 4);
+  const picks = recentCards.map(c => {
+    const name = c.querySelector('.pick-name')?.textContent || '';
+    const sport = c.querySelector('.sport-tag')?.textContent || '';
+    return name ? `<div class="streak-pick-row">✓ ${name} · ${sport}</div>` : '';
+  }).join('');
+  document.getElementById('streakModalPicks').innerHTML = picks;
+  document.getElementById('streakModal').style.display = 'flex';
+}
 </script>
 </body>
 </html>

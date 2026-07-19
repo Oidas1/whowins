@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Scout's Record</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/record" class="nav-link active">Record</a>
+    <a href="/wait" class="nav-link">Join Waitlist</a>
+    {% if authed %}
+    <a href="/vs-vegas" class="nav-link">vs Vegas</a>
+    <a href="/plays" class="nav-link">Plays</a>
+    <a href="/journal" class="nav-link">Journal</a>
+    {% endif %}
+  </nav>
+</header>
+
+<main>
+<div class="record-wrap">
+
+  <!-- Hero stat -->
+  <div class="record-hero">
+    <div class="record-hero-label">Scout's All-Time Record</div>
+    <div class="record-hero-main">
+      <div class="record-big-stat">
+        <span class="record-big-num {% if rate >= 60 %}stat-green{% elif rate >= 50 %}stat-gold{% else %}stat-red{% endif %}">{{ rate }}%</span>
+        <span class="record-big-label">hit rate</span>
+      </div>
+      <div class="record-divider-v"></div>
+      <div class="record-big-stat">
+        <span class="record-big-num">{{ wins }}–{{ total - wins }}</span>
+        <span class="record-big-label">W–L record</span>
+      </div>
+      <div class="record-divider-v"></div>
+      <div class="record-big-stat">
+        <span class="record-big-num">{{ total }}</span>
+        <span class="record-big-label">settled picks</span>
+      </div>
+    </div>
+    {% if vegas_rate and odds_count >= 5 %}
+    <div class="record-vs-vegas">
+      <span class="record-vs-label">vs Vegas:</span>
+      Scout {{ rate }}% &nbsp;·&nbsp; Vegas {{ vegas_rate }}%
+      {% if rate > vegas_rate %}
+      <span class="record-edge-badge">+{{ rate - vegas_rate }}pp edge</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if value_rate and value_count >= 3 %}
+    <div class="record-value-note">
+      🎯 Value picks (Scout vs market edge ≥10%): <strong>{{ value_rate }}%</strong> accuracy over {{ value_count }} picks
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Sport breakdown -->
+  {% if sport_list %}
+  <div class="record-section">
+    <div class="record-section-title">By Sport</div>
+    <div class="record-sport-grid">
+      {% for sport, st in sport_list %}
+      {% if st.total >= 2 %}
+      <div class="record-sport-card">
+        <div class="record-sport-name">{{ sport }}</div>
+        <div class="record-sport-rate {% if st.rate >= 60 %}stat-green{% elif st.rate >= 50 %}stat-gold{% else %}stat-red{% endif %}">{{ st.rate }}%</div>
+        <div class="record-sport-record">{{ st.wins }}W–{{ st.total - st.wins }}L</div>
+        <div class="record-sport-bar-track">
+          <div class="record-sport-bar-fill" style="width:{{ st.rate }}%"></div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Best calls -->
+  {% if best_picks %}
+  <div class="record-section">
+    <div class="record-section-title">Best Calls (High Confidence Wins)</div>
+    <div class="record-best-list">
+      {% for p in best_picks %}
+      <div class="record-best-card">
+        <span class="sport-tag">{{ p.sport }}</span>
+        <span class="record-best-winner" style="text-transform:capitalize">✓ {{ p.winner }}</span>
+        <span class="record-best-matchup" style="text-transform:capitalize">{{ p.competitor_a }} vs {{ p.competitor_b }}</span>
+        <span class="conf-badge conf-high">High</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Live ticker -->
+  {% if recent_activity %}
+  <div class="record-section">
+    <div class="record-section-title">Recent Picks</div>
+    <div class="record-ticker">
+      {% for p in recent_activity %}
+      <div class="record-tick {% if p.outcome == 'win' %}tick-win{% else %}tick-loss{% endif %}">
+        <span class="tick-outcome">{% if p.outcome == 'win' %}✓{% else %}✗{% endif %}</span>
+        <span class="sport-tag">{{ p.sport }}</span>
+        <span class="tick-name" style="text-transform:capitalize">{{ p.winner }}</span>
+        <span class="tick-date">{{ p.created_at.strftime('%b %d') }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- CTA -->
+  <div class="record-cta">
+    {% if not total %}
+    <p class="record-cta-sub">No settled picks yet — check back soon.</p>
+    {% endif %}
+    <a href="/wait" class="btn-cta-primary">Join the waitlist →</a>
+    <a href="/login" class="btn-cta-secondary">I have access</a>
+  </div>
+
+</div>
+</main>
+</body>
+</html>
