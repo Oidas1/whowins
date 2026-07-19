@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — {{ q.competitor_a }} vs {{ q.competitor_b }}</title>
+  <meta property="og:title"       content="Scout: {{ q.winner }} wins ({{ q.confidence }} confidence)">
+  <meta property="og:description" content="{{ q.competitor_a }} vs {{ q.competitor_b }} · {{ q.sport }}">
+  <meta property="og:image"       content="/pick/{{ q.id }}/image">
+  <meta property="og:type"        content="article">
+  <meta name="twitter:card"       content="summary_large_image">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .pick-page { max-width: 720px; margin: 32px auto; padding: 0 16px; }
+    .pick-sport-tag { display: inline-block; background: var(--accent-dim); color: var(--accent); border-radius: 20px; padding: 3px 12px; font-size: 0.75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 12px; }
+    .pick-matchup { font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; }
+    .pick-date { color: var(--muted); font-size: 0.8rem; margin-bottom: 24px; }
+    .pick-hero { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+    .pick-winner-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .pick-winner-name { font-size: 1.3rem; font-weight: 800; }
+    .pick-conf-badge { border-radius: 20px; padding: 4px 14px; font-size: 0.8rem; font-weight: 700; }
+    .conf-high   { background: #1a3a1a; color: #4caf50; }
+    .conf-medium { background: #2a2a1a; color: #ffc107; }
+    .conf-low    { background: #1a1a2a; color: #7986cb; }
+    .pick-prob-row { display: flex; gap: 12px; margin-bottom: 20px; }
+    .pick-prob-side { flex: 1; background: var(--bg); border-radius: 12px; padding: 14px; text-align: center; }
+    .pick-prob-side.winner-side { border: 2px solid var(--accent); }
+    .pick-prob-name { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pick-prob-pct { font-size: 1.5rem; font-weight: 800; }
+    .pick-prob-side.winner-side .pick-prob-pct { color: var(--accent); }
+    .pick-outcome-pill { display: inline-block; border-radius: 20px; padding: 4px 14px; font-size: 0.8rem; font-weight: 700; }
+    .outcome-win  { background: rgba(76,175,80,.2);  color: #4caf50; }
+    .outcome-loss { background: rgba(244,67,54,.2);  color: #f44336; }
+    .outcome-pending { background: rgba(255,255,255,.08); color: var(--muted); }
+    .pick-analysis { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; font-size: 0.88rem; line-height: 1.7; white-space: pre-wrap; color: var(--muted); margin-bottom: 20px; max-height: 480px; overflow-y: auto; }
+    .pick-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+    .pick-cta a, .pick-cta button {
+      flex: 1; min-width: 140px; padding: 12px 20px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; cursor: pointer; text-align: center; border: none; text-decoration: none; display: inline-block;
+    }
+    .btn-share { background: var(--accent); color: #fff; }
+    .btn-try   { background: var(--card); border: 1px solid var(--border) !important; color: var(--text); }
+    .btn-share:hover { opacity: .85; }
+    .btn-try:hover   { background: var(--hover); }
+    .pick-public-note { text-align: center; color: var(--muted); font-size: 0.75rem; margin-top: 24px; }
+    @media (max-width: 480px) {
+      .pick-matchup { font-size: 1.2rem; }
+      .pick-prob-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/record" class="nav-link">Record</a>
+    <a href="/" class="nav-link">Login</a>
+  </nav>
+</header>
+
+<main>
+  <div class="pick-page">
+
+    <span class="pick-sport-tag">{{ q.sport or 'Sports' }}</span>
+    <div class="pick-matchup">{{ q.competitor_a }} vs {{ q.competitor_b }}</div>
+    <div class="pick-date">
+      Scout's pick · {{ q.created_at.strftime('%B %d, %Y') }}
+      {% if q.outcome != 'pending' %}
+        ·
+        {% if q.outcome == 'win' %}<span class="pick-outcome-pill outcome-win">✓ Scout Won</span>
+        {% else %}<span class="pick-outcome-pill outcome-loss">✗ Scout Lost</span>{% endif %}
+      {% else %}
+        · <span class="pick-outcome-pill outcome-pending">Pending</span>
+      {% endif %}
+    </div>
+
+    <div class="pick-hero">
+      <div class="pick-winner-row">
+        <div style="font-size:1.1rem; color:var(--muted)">Scout picks:</div>
+        <div class="pick-winner-name">{{ q.winner or '—' }}</div>
+        {% set conf_lower = (q.confidence or 'medium')|lower %}
+        <span class="pick-conf-badge conf-{{ conf_lower }}">
+          {% if conf_lower == 'high' %}🔥{% elif conf_lower == 'low' %}🎲{% else %}⚡{% endif %}
+          {{ q.confidence or 'Medium' }}
+        </span>
+      </div>
+
+      {% set winner_is_a = q.winner and q.competitor_a and q.winner|lower in q.competitor_a|lower %}
+      <div class="pick-prob-row">
+        <div class="pick-prob-side {% if winner_is_a %}winner-side{% endif %}">
+          <div class="pick-prob-name">{{ q.competitor_a }}</div>
+          <div class="pick-prob-pct">{{ q.ai_a_pct or '—' }}%</div>
+        </div>
+        <div class="pick-prob-side {% if not winner_is_a %}winner-side{% endif %}">
+          <div class="pick-prob-name">{{ q.competitor_b }}</div>
+          <div class="pick-prob-pct">{{ q.ai_b_pct or '—' }}%</div>
+        </div>
+      </div>
+
+      <div class="pick-cta">
+        <button class="btn-share" onclick="shareThis()">📤 Share this pick</button>
+        <a href="/" class="btn-try">Try WhoWins →</a>
+      </div>
+    </div>
+
+    {% if q.analysis %}
+    <div style="font-weight:700; margin-bottom:10px; font-size:0.9rem;">Scout's Full Analysis</div>
+    <div class="pick-analysis">{{ q.analysis }}</div>
+    {% endif %}
+
+    <p class="pick-public-note">
+      This pick was generated by Scout, WhoWins' AI sports prediction model.<br>
+      For informational purposes only — not betting advice.
+    </p>
+
+  </div>
+</main>
+
+<script>
+function shareThis() {
+  const url   = window.location.href;
+  const text  = `Scout picks {{ q.winner or '?' }} to beat {{ q.competitor_b if winner_is_a else q.competitor_a }} ({{ q.confidence }} confidence) — {{ q.competitor_a }} vs {{ q.competitor_b }}`;
+  if (navigator.share) {
+    navigator.share({ title: 'WhoWins Pick', text, url }).catch(() => fallback(url));
+  } else {
+    fallback(url);
+  }
+}
+function fallback(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.querySelector('.btn-share');
+    btn.textContent = '✓ Link copied!';
+    setTimeout(() => btn.textContent = '📤 Share this pick', 2000);
+  }).catch(() => prompt('Copy this link:', url));
+}
+</script>
+</body>
+</html>

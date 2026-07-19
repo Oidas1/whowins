@@ -873,6 +873,101 @@ async function loadDailyBestBet() {
   } catch (_) {}
 }
 
+// ── Ask Scout follow-up chat ──────────────────────
+
+let _savedQueryId = null;
+
+function showAskScout() {
+  const existing = document.getElementById('askScoutSection');
+  if (existing) { existing.style.display = 'block'; existing.querySelector('textarea').focus(); return; }
+
+  const card = document.getElementById('resultSection')?.querySelector('.result-card');
+  if (!card) return;
+
+  const section = document.createElement('div');
+  section.id = 'askScoutSection';
+  section.className = 'ask-scout-section';
+  section.innerHTML = `
+    <div class="ask-scout-label">💬 Ask Scout about this pick</div>
+    <div class="ask-scout-input-row">
+      <textarea id="askScoutInput" class="ask-scout-input" rows="2" placeholder="Why is Scout picking ${currentComp1}? What's the biggest risk? Any injury concerns?"></textarea>
+      <button class="ask-scout-send" onclick="sendAskScout()" title="Send">→</button>
+    </div>
+    <div id="askScoutResponse" class="ask-scout-response" style="display:none"></div>`;
+  card.appendChild(section);
+  section.querySelector('textarea').focus();
+
+  section.querySelector('textarea').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAskScout(); }
+  });
+}
+
+async function sendAskScout() {
+  const input = document.getElementById('askScoutInput');
+  const respEl = document.getElementById('askScoutResponse');
+  if (!input || !respEl) return;
+  const question = input.value.trim();
+  if (!question) return;
+
+  input.disabled = true;
+  respEl.style.display = 'block';
+  respEl.textContent = ''; // stream into this
+
+  const loadingEl = document.createElement('span');
+  loadingEl.className = 'ask-scout-loading';
+  loadingEl.textContent = '🔍 Scout is thinking…';
+  respEl.appendChild(loadingEl);
+
+  try {
+    const res = await fetch('/api/ask-scout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        query_id: _savedQueryId,
+        analysis: fullText,
+        sport: currentSport,
+        comp1: currentComp1,
+        comp2: currentComp2,
+      }),
+    });
+    if (!res.ok) { respEl.textContent = 'Could not get a response. Try again.'; input.disabled = false; return; }
+
+    respEl.textContent = '';
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      respEl.textContent += decoder.decode(value, { stream: true });
+    }
+  } catch (_) {
+    respEl.textContent = 'Something went wrong.';
+  }
+
+  input.disabled = false;
+  input.value    = '';
+}
+
+// ── Share current pick permalink ──────────────────
+
+function sharePickLink(queryId) {
+  const url = `${location.origin}/pick/${queryId}`;
+  if (navigator.share) {
+    const text = `Scout picks ${resultData?.winner || '?'} — ${currentComp1} vs ${currentComp2}`;
+    navigator.share({ title: 'WhoWins Pick', text, url }).catch(() => copyToClipboard(url));
+  } else {
+    copyToClipboard(url);
+  }
+}
+function copyToClipboard(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('shareBtn');
+    const orig = btn?.textContent;
+    if (btn) { btn.textContent = '✓ Link copied!'; setTimeout(() => btn.textContent = orig, 2000); }
+  }).catch(() => prompt('Copy this link:', url));
+}
+
 async function saveToJournal(sport, comp1, comp2, analysis, prediction, odds) {
   if (!analysis || analysis.startsWith('ERROR')) return;
   try {
@@ -883,10 +978,25 @@ async function saveToJournal(sport, comp1, comp2, analysis, prediction, odds) {
       a_odds_pct: (odds?.found && odds?.a_pct) ? odds.a_pct : null,
       b_odds_pct: (odds?.found && odds?.b_pct) ? odds.b_pct : null,
     };
-    await fetch('/journal/save', {
+    const res  = await fetch('/journal/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    const data = await res.json();
+    if (data.id) {
+      _savedQueryId = data.id;
+      // Inject Ask Scout + permalink buttons below result card
+      const card = document.getElementById('resultSection')?.querySelector('.result-card');
+      if (card && !document.getElementById('pickActions')) {
+        const actions = document.createElement('div');
+        actions.id = 'pickActions';
+        actions.className = 'pick-actions-row';
+        actions.innerHTML = `
+          <button class="btn-ask-scout" onclick="showAskScout()">💬 Ask Scout</button>
+          <button class="btn-permalink" onclick="sharePickLink(${data.id})">🔗 Share pick</button>`;
+        card.appendChild(actions);
+      }
+    }
   } catch (_) {}
 }

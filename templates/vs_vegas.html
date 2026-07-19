@@ -15,6 +15,7 @@
     <a href="/plays" class="nav-link">Plays</a>
     <a href="/leaderboard" class="nav-link">Leaderboard</a>
     <a href="/journal" class="nav-link">Journal</a>
+    <a href="/today" class="nav-link">Today</a>
     <a href="/record" class="nav-link">Record</a>
     <a href="/logout" class="nav-link">Logout</a>
   </nav>
@@ -117,6 +118,13 @@
       <div class="calibration-rows" id="calibrationRows"></div>
     </div>
 
+    <!-- Sport Accuracy Breakdown -->
+    <div class="calibration-section" id="sportSection" style="display:none">
+      <div class="calibration-title">🏟️ Accuracy by Sport</div>
+      <p class="calibration-desc">Where Scout is sharpest. Only sports with 2+ settled picks shown.</p>
+      <div id="sportRows"></div>
+    </div>
+
   </div>
 </main>
 
@@ -166,6 +174,42 @@ async function loadCalibration() {
   } catch (_) {}
 }
 loadCalibration();
+loadSportAccuracy();
+
+async function loadSportAccuracy() {
+  try {
+    const res  = await fetch('/api/sport-accuracy');
+    const data = await res.json();
+    if (!data.length) return;
+    let html = '';
+    data.forEach(s => {
+      const barW   = Math.min(s.rate, 100);
+      const target = 60;
+      const diff   = s.rate - target;
+      const diffCls = diff >= 0 ? 'calib-above' : 'calib-below';
+      const diffStr = diff >= 0 ? `+${diff}pp` : `${diff}pp`;
+      const highStr = s.high_rate !== null ? ` · High conf: ${s.high_rate}% (${s.high_total})` : '';
+      html += `
+        <div class="calib-row">
+          <div class="calib-label">${s.sport}</div>
+          <div class="calib-bar-wrap">
+            <div class="calib-bar-track">
+              <div class="calib-bar-fill" style="width:${barW}%"></div>
+              <div class="calib-target-line" style="left:${target}%" title="Target 60%"></div>
+            </div>
+          </div>
+          <div class="calib-nums">
+            <span class="calib-rate">${s.rate}%</span>
+            <span class="calib-total">(${s.wins}/${s.total})</span>
+            <span class="calib-diff ${diffCls}">${diffStr}</span>
+            <span style="color:var(--muted);font-size:0.75rem">${highStr}</span>
+          </div>
+        </div>`;
+    });
+    document.getElementById('sportRows').innerHTML = html;
+    document.getElementById('sportSection').style.display = 'block';
+  } catch (_) {}
+}
 </script>
 </body>
 </html>

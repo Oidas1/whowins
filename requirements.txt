@@ -6,3 +6,4 @@ psycopg2-binary
 tavily-python
 pillow
 flask-limiter
+pywebpush

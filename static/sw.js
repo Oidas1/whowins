@@ -1,4 +1,4 @@
-const CACHE = 'whowins-v2';
+const CACHE = 'whowins-v3';
 const SHELL = ['/static/css/style.css', '/static/js/app.js', '/static/js/celebrities.js'];
 
 self.addEventListener('install', e => {
@@ -15,7 +15,6 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  // Cache-first for static assets, network-first for API/pages
   if (url.pathname.startsWith('/static/')) {
     e.respondWith(
       caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
@@ -25,4 +24,32 @@ self.addEventListener('fetch', e => {
       }))
     );
   }
+});
+
+// Push notification handler
+self.addEventListener('push', e => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (_) {}
+  const title = data.title || 'WhoWins Scout';
+  const opts  = {
+    body:  data.body  || "Scout has a new pick for you.",
+    icon:  '/static/icons/icon-192.png',
+    badge: '/static/icons/icon-192.png',
+    data:  { url: data.url || '/today' },
+    vibrate: [200, 100, 200],
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/today';
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      for (const c of clientList) {
+        if (c.url === url && 'focus' in c) return c.focus();
+      }
+      return clients.openWindow(url);
+    })
+  );
 });

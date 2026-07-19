@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoWins — Scout's Daily Picks</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .today-wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+    .today-header { text-align: center; padding: 36px 0 20px; }
+    .today-icon { font-size: 2.4rem; margin-bottom: 8px; }
+    .today-title { font-size: 1.8rem; font-weight: 800; margin-bottom: 6px; }
+    .today-sub { color: var(--muted); font-size: 0.9rem; }
+    .today-date { display: inline-block; background: var(--accent-dim); color: var(--accent); border-radius: 20px; padding: 3px 14px; font-size: 0.75rem; font-weight: 700; margin-top: 8px; }
+    .push-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin-bottom: 24px; flex-wrap: wrap; }
+    .push-banner-text { font-size: 0.88rem; color: var(--muted); }
+    .btn-notify { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 0.82rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .btn-notify:disabled { opacity: .5; cursor: default; }
+
+    .today-loading { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .today-empty { text-align: center; padding: 60px 20px; }
+    .today-empty h3 { font-size: 1.1rem; margin-bottom: 8px; }
+    .today-empty p { color: var(--muted); font-size: 0.85rem; }
+    .today-list { display: flex; flex-direction: column; gap: 16px; }
+
+    .daily-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; }
+    .daily-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+    .daily-sport-tag { background: var(--accent-dim); color: var(--accent); border-radius: 20px; padding: 3px 12px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+    .daily-conf-badge { border-radius: 20px; padding: 3px 12px; font-size: 0.72rem; font-weight: 700; }
+    .conf-high   { background: rgba(76,175,80,.15);  color: #4caf50; }
+    .conf-medium { background: rgba(255,193,7,.12);  color: #ffc107; }
+    .conf-low    { background: rgba(121,134,203,.12);color: #7986cb; }
+    .daily-matchup { font-size: 1.1rem; font-weight: 800; margin-bottom: 12px; }
+    .daily-prob-row { display: flex; gap: 10px; margin-bottom: 14px; }
+    .daily-prob-side { flex: 1; background: var(--bg); border-radius: 10px; padding: 10px 12px; text-align: center; }
+    .daily-prob-side.dp-winner { border: 1.5px solid var(--accent); }
+    .daily-prob-name { font-size: 0.75rem; color: var(--muted); margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .daily-prob-pct  { font-size: 1.3rem; font-weight: 800; }
+    .dp-winner .daily-prob-pct { color: var(--accent); }
+    .daily-scout-pick { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .daily-scout-label { color: var(--muted); font-size: 0.82rem; }
+    .daily-scout-name { font-weight: 700; font-size: 0.95rem; }
+    .daily-edge { margin-left: auto; background: rgba(76,175,80,.15); color: #4caf50; border-radius: 6px; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; }
+    .daily-tip { color: var(--muted); font-size: 0.82rem; line-height: 1.55; padding: 10px 12px; background: var(--bg); border-radius: 8px; margin-bottom: 14px; }
+    .daily-card-footer { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-permalink { flex: 1; min-width: 120px; text-align: center; padding: 9px 16px; border-radius: 8px; font-size: 0.82rem; font-weight: 700; text-decoration: none; border: 1px solid var(--border); color: var(--text); background: var(--bg); }
+    .btn-permalink:hover { background: var(--hover); }
+    .btn-share-pick { flex: 1; min-width: 120px; text-align: center; padding: 9px 16px; border-radius: 8px; font-size: 0.82rem; font-weight: 700; background: var(--accent); color: #fff; border: none; cursor: pointer; }
+    .btn-share-pick:hover { opacity: .85; }
+    .today-disclaimer { text-align: center; color: var(--muted); font-size: 0.72rem; margin: 28px 0 16px; }
+    @media (max-width: 480px) {
+      .daily-matchup { font-size: 0.95rem; }
+      .daily-prob-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/" class="logo">🏆 WhoWins</a>
+  <nav class="header-nav">
+    <a href="/vs-vegas" class="nav-link">vs Vegas</a>
+    <a href="/plays" class="nav-link">Plays</a>
+    <a href="/leaderboard" class="nav-link">Leaderboard</a>
+    <a href="/journal" class="nav-link">Journal</a>
+    <a href="/today" class="nav-link active">Today</a>
+    <a href="/record" class="nav-link">Record</a>
+    <a href="/logout" class="nav-link">Logout</a>
+  </nav>
+</header>
+
+<main>
+  <div class="today-wrap">
+
+    <div class="today-header">
+      <div class="today-icon">🎯</div>
+      <div class="today-title">Scout's Daily Picks</div>
+      <div class="today-sub">Auto-analyzed. High-conviction only.</div>
+      <div class="today-date" id="todayDate"></div>
+    </div>
+
+    <div class="push-banner" id="pushBanner" style="display:none">
+      <div class="push-banner-text">📲 Get notified when daily picks drop each morning.</div>
+      <button class="btn-notify" id="btnNotify" onclick="subscribePush()">Enable Alerts</button>
+    </div>
+
+    <div id="todayLoading" class="today-loading">
+      <div class="loading-dots"><span></span><span></span><span></span><span></span><span></span></div>
+      <p style="margin-top:12px;font-size:0.82rem">Fetching today's picks…</p>
+    </div>
+
+    <div id="todayEmpty" class="today-empty" style="display:none">
+      <h3>No picks yet for today</h3>
+      <p>Scout analyzes today's top matchups each morning.<br>Check back soon or run your own prediction below.</p>
+      <a href="/" class="btn-new" style="display:inline-block;margin-top:16px">Run a prediction →</a>
+    </div>
+
+    <div id="todayList" class="today-list" style="display:none"></div>
+
+    <p class="today-disclaimer">
+      Scout's picks are AI-generated probability estimates for informational use only.<br>
+      Not financial or betting advice.
+    </p>
+
+  </div>
+</main>
+
+<script>
+const todayDate = new Date();
+document.getElementById('todayDate').textContent = todayDate.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+
+async function loadTodayPicks() {
+  try {
+    const res   = await fetch('/api/today-picks');
+    const picks = await res.json();
+    document.getElementById('todayLoading').style.display = 'none';
+    if (!picks.length) {
+      document.getElementById('todayEmpty').style.display = 'block';
+      return;
+    }
+    document.getElementById('todayList').innerHTML = picks.map(renderCard).join('');
+    document.getElementById('todayList').style.display = 'flex';
+  } catch (_) {
+    document.getElementById('todayLoading').style.display = 'none';
+    document.getElementById('todayEmpty').style.display   = 'block';
+  }
+}
+
+function renderCard(p) {
+  const winnerIsA = p.winner && p.comp_a && p.winner.toLowerCase().includes(p.comp_a.split(' ')[0].toLowerCase());
+  const confLow   = (p.confidence || 'medium').toLowerCase();
+  const confEmoji = confLow === 'high' ? '🔥' : confLow === 'low' ? '🎲' : '⚡';
+  const edgeLabel = p.edge ? `+${Math.round(p.edge)}pp edge` : '';
+  const tipHtml   = p.scout_tip  ? `<div class="daily-tip">💡 ${p.scout_tip}</div>` : '';
+  const reasonHtml= p.reason && !p.scout_tip ? `<div class="daily-tip">${p.reason}</div>` : '';
+
+  return `
+    <div class="daily-card">
+      <div class="daily-card-top">
+        <span class="daily-sport-tag">${p.sport || 'Sports'}</span>
+        <span class="daily-conf-badge conf-${confLow}">${confEmoji} ${p.confidence || 'Medium'}</span>
+      </div>
+      <div class="daily-matchup">${p.comp_a} vs ${p.comp_b}</div>
+      <div class="daily-prob-row">
+        <div class="daily-prob-side ${winnerIsA ? 'dp-winner' : ''}">
+          <div class="daily-prob-name">${p.comp_a}</div>
+          <div class="daily-prob-pct">${p.ai_a_pct || '—'}%</div>
+        </div>
+        <div class="daily-prob-side ${!winnerIsA ? 'dp-winner' : ''}">
+          <div class="daily-prob-name">${p.comp_b}</div>
+          <div class="daily-prob-pct">${p.ai_b_pct || '—'}%</div>
+        </div>
+      </div>
+      <div class="daily-scout-pick">
+        <span class="daily-scout-label">Scout picks:</span>
+        <span class="daily-scout-name">${p.winner || '—'}</span>
+        ${edgeLabel ? `<span class="daily-edge">${edgeLabel}</span>` : ''}
+      </div>
+      ${tipHtml}${reasonHtml}
+      <div class="daily-card-footer">
+        <a href="/pick/${p.id}" class="btn-permalink">🔗 Full analysis</a>
+        <button class="btn-share-pick" onclick="sharePick(${p.id}, '${encodeURIComponent(p.comp_a)} vs ${encodeURIComponent(p.comp_b)}', '${encodeURIComponent(p.winner || '')}')">📤 Share</button>
+      </div>
+    </div>`;
+}
+
+function sharePick(id, matchupEnc, winnerEnc) {
+  const matchup = decodeURIComponent(matchupEnc);
+  const winner  = decodeURIComponent(winnerEnc);
+  const url     = `${location.origin}/pick/${id}`;
+  const text    = `Scout picks ${winner} — ${matchup} | WhoWins`;
+  if (navigator.share) {
+    navigator.share({ title: 'WhoWins Pick', text, url }).catch(() => copyUrl(url));
+  } else {
+    copyUrl(url);
+  }
+}
+function copyUrl(url) {
+  navigator.clipboard.writeText(url).then(() => alert('Link copied!')).catch(() => prompt('Copy:', url));
+}
+
+// Push notification subscription
+async function initPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const {key} = await fetch('/api/push/public-key').then(r => r.json());
+  if (!key) return;
+  window._vapidKey = key;
+  const perm = Notification.permission;
+  if (perm !== 'granted') {
+    document.getElementById('pushBanner').style.display = 'flex';
+  }
+}
+
+async function subscribePush() {
+  const btn = document.getElementById('btnNotify');
+  btn.disabled = true;
+  btn.textContent = 'Enabling…';
+  try {
+    const reg  = await navigator.serviceWorker.ready;
+    const sub  = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8(window._vapidKey),
+    });
+    const data = sub.toJSON();
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ endpoint: data.endpoint, keys: data.keys }),
+    });
+    btn.textContent = '✓ Alerts on!';
+    setTimeout(() => document.getElementById('pushBanner').style.display = 'none', 2000);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Enable Alerts';
+    console.error(e);
+  }
+}
+
+function urlBase64ToUint8(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+loadTodayPicks();
+initPush();
+</script>
+</body>
+</html>

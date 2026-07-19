@@ -19,6 +19,12 @@ import urllib.parse
 import json
 from PIL import Image, ImageDraw, ImageFont
 
+try:
+    from pywebpush import webpush, WebPushException
+    _PUSH_AVAILABLE = True
+except ImportError:
+    _PUSH_AVAILABLE = False
+
 app = Flask(__name__)
 
 # ── Security ──────────────────────────────────────────────────────────────────
@@ -161,6 +167,30 @@ class SquadMember(db.Model):
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint('squad_id', 'user_uid'),)
 
+class DailyCurated(db.Model):
+    __tablename__ = 'ww_daily_picks'
+    id           = db.Column(db.Integer, primary_key=True)
+    date         = db.Column(db.String(10), nullable=False, index=True)   # YYYY-MM-DD
+    sport        = db.Column(db.String(50))
+    competitor_a = db.Column(db.String(100))
+    competitor_b = db.Column(db.String(100))
+    winner       = db.Column(db.String(100))
+    confidence   = db.Column(db.String(20))
+    ai_a_pct     = db.Column(db.Integer)
+    ai_b_pct     = db.Column(db.Integer)
+    reason       = db.Column(db.Text)
+    scout_tip    = db.Column(db.Text)
+    edge         = db.Column(db.Float)
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PushSubscription(db.Model):
+    __tablename__ = 'ww_push_subs'
+    id         = db.Column(db.Integer, primary_key=True)
+    user_uid   = db.Column(db.String(64), nullable=False, index=True)
+    endpoint   = db.Column(db.Text, nullable=False, unique=True)
+    keys_json  = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 with app.app_context():
     try:
         db.create_all()
@@ -266,6 +296,251 @@ def _value_edge(q):
     scout = (q.ai_a_pct if winner_is_a else q.ai_b_pct) or 0
     mkt   = (q.a_odds_pct if winner_is_a else q.b_odds_pct) or 0
     return abs(scout - mkt)
+
+# ── Push notification helpers ─────────────────────────────────────────────────
+
+def _get_vapid_keys():
+    """Return (private_key, public_key) strings from AppConfig, or (None, None)."""
+    try:
+        priv = AppConfig.query.filter_by(key='vapid_private').first()
+        pub  = AppConfig.query.filter_by(key='vapid_public').first()
+        if priv and pub:
+            return priv.value, pub.value
+    except Exception:
+        pass
+    return None, None
+
+def send_push_notification(subscription_info, title, body, url='/'):
+    """Send a Web Push notification. subscription_info = {endpoint, keys:{p256dh, auth}}."""
+    if not _PUSH_AVAILABLE:
+        return False
+    private_key, _ = _get_vapid_keys()
+    if not private_key:
+        return False
+    try:
+        webpush(
+            subscription_info=subscription_info,
+            data=json.dumps({'title': title, 'body': body, 'url': url}),
+            vapid_private_key=private_key,
+            vapid_claims={'sub': 'mailto:sadiotraore01@gmail.com'},
+        )
+        return True
+    except Exception:
+        return False
+
+# ── Auto-settle helpers ────────────────────────────────────────────────────────
+
+def _fetch_espn_completed(sport_cat, league):
+    """Fetch completed games from ESPN for the past 5 days."""
+    games = []
+    for days_ago in range(0, 6):
+        date_str = (datetime.utcnow() - timedelta(days=days_ago)).strftime('%Y%m%d')
+        url = (f"https://site.api.espn.com/apis/site/v2/sports/"
+               f"{sport_cat}/{league}/scoreboard?dates={date_str}")
+        try:
+            req  = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            data = json.loads(urllib.request.urlopen(req, timeout=6).read())
+            for event in data.get('events', []):
+                for comp in event.get('competitions', []):
+                    if not comp.get('status', {}).get('type', {}).get('completed'):
+                        continue
+                    competitors = comp.get('competitors', [])
+                    if len(competitors) < 2:
+                        continue
+                    winner_name = None
+                    comp_names  = []
+                    for c in competitors:
+                        t    = c.get('team', {})
+                        nm   = (t.get('displayName') or t.get('name') or
+                                c.get('athlete', {}).get('displayName', ''))
+                        comp_names.append(nm)
+                        if c.get('winner'):
+                            winner_name = nm
+                    if winner_name and len(comp_names) >= 2:
+                        games.append({
+                            'a': comp_names[0], 'b': comp_names[1],
+                            'winner': winner_name, 'date': date_str,
+                        })
+        except Exception:
+            continue
+    return games
+
+def _settle_via_search(q):
+    """Use Tavily + Claude Haiku to find the result for non-ESPN sports."""
+    if not ANTHROPIC_API_KEY or not TAVILY_API_KEY:
+        return False
+    try:
+        query_text = (f"{q.competitor_a} vs {q.competitor_b} "
+                      f"{q.sport or ''} result winner score final 2026")
+        result = web_search(query_text, depth='basic', max_results=3)
+        if not result:
+            return False
+        prompt = (f"Match: {q.competitor_a} vs {q.competitor_b} ({q.sport or 'sports'})\n"
+                  f"Search: {result[:600]}\n\n"
+                  f"Who won? Reply with EXACTLY one line:\n"
+                  f"WINNER: {q.competitor_a}\n"
+                  f"WINNER: {q.competitor_b}\n"
+                  f"UNKNOWN")
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        msg    = client.messages.create(
+            model='claude-haiku-4-5-20251001', max_tokens=20,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        if 'UNKNOWN' in raw.upper():
+            return False
+        m = re.search(r'WINNER:\s*(.+)', raw, re.IGNORECASE)
+        if not m:
+            return False
+        actual = m.group(1).strip()
+        if not q.winner:
+            return False
+        q.outcome = 'win' if name_match(actual, q.winner) else 'loss'
+        db.session.commit()
+        return True
+    except Exception:
+        return False
+
+def _run_auto_settle():
+    """Match all pending picks against ESPN scoreboards + Tavily fallback."""
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    pending  = Query.query.filter(
+        Query.outcome == 'pending',
+        Query.created_at >= week_ago,
+        Query.competitor_a.isnot(None),
+        Query.competitor_b.isnot(None),
+        Query.winner.isnot(None),
+    ).all()
+
+    if not pending:
+        return {'settled': 0, 'failed': 0, 'total': 0}
+
+    settled = failed = 0
+    sport_groups = {}
+    for q in pending:
+        sk = (q.sport or '').lower().split()[0]
+        sport_groups.setdefault(sk, []).append(q)
+
+    for sk, queries in sport_groups.items():
+        mapping = ESPN_LEAGUE_MAP.get(sk)
+        if mapping:
+            completed = _fetch_espn_completed(*mapping)
+            for q in queries:
+                matched = False
+                for game in completed:
+                    a_hit = name_match(game['a'], q.competitor_a) or name_match(game['b'], q.competitor_a)
+                    b_hit = name_match(game['a'], q.competitor_b) or name_match(game['b'], q.competitor_b)
+                    if not (a_hit and b_hit):
+                        continue
+                    q.outcome = 'win' if name_match(game['winner'], q.winner) else 'loss'
+                    db.session.commit()
+                    settled += 1
+                    matched = True
+                    break
+                if not matched:
+                    if _settle_via_search(q):
+                        settled += 1
+                    else:
+                        failed += 1
+        else:
+            for q in queries:
+                if _settle_via_search(q):
+                    settled += 1
+                else:
+                    failed += 1
+
+    return {'settled': settled, 'failed': failed, 'total': len(pending)}
+
+# ── Daily curated picks ────────────────────────────────────────────────────────
+
+_DAILY_SPORTS = ['nba', 'nfl', 'mlb', 'nhl', 'soccer', 'mls']
+
+def _generate_daily_picks():
+    """Find today's top games via ESPN and auto-analyze the best 3."""
+    today     = datetime.utcnow().strftime('%Y-%m-%d')
+    today_espn = datetime.utcnow().strftime('%Y%m%d')
+
+    existing = DailyCurated.query.filter_by(date=today).count()
+    if existing >= 3:
+        return DailyCurated.query.filter_by(date=today).order_by(DailyCurated.edge.desc()).all()
+
+    candidates = []
+    for sk in _DAILY_SPORTS:
+        mapping = ESPN_LEAGUE_MAP.get(sk)
+        if not mapping:
+            continue
+        sport_cat, league = mapping
+        try:
+            url = (f"https://site.api.espn.com/apis/site/v2/sports/"
+                   f"{sport_cat}/{league}/scoreboard?dates={today_espn}")
+            req  = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            data = json.loads(urllib.request.urlopen(req, timeout=6).read())
+            for event in data.get('events', [])[:3]:
+                for comp in event.get('competitions', []):
+                    teams = comp.get('competitors', [])
+                    names = []
+                    for t in teams:
+                        nm = (t.get('team', {}).get('displayName') or
+                              t.get('athlete', {}).get('displayName', ''))
+                        if nm:
+                            names.append(nm)
+                    if len(names) >= 2:
+                        candidates.append({'sport': sk, 'a': names[0], 'b': names[1]})
+        except Exception:
+            continue
+
+    if not candidates:
+        return []
+
+    picks = []
+    for c in candidates[:7]:
+        try:
+            prompt    = build_prompt(c['sport'], c['a'], c['b'], '')
+            client    = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            full_text = ''
+            with client.messages.stream(
+                model='claude-opus-4-8', max_tokens=2400,
+                messages=[{'role': 'user', 'content': prompt}]
+            ) as stream:
+                for chunk in stream.text_stream:
+                    full_text += chunk
+
+            def _gf(key):
+                m = re.search(rf'^{key}:\s*(.+)$', full_text, re.MULTILINE)
+                return m.group(1).strip() if m else ''
+
+            winner     = _gf('WINNER')
+            confidence = _gf('CONFIDENCE') or 'Medium'
+            a_raw      = _gf('A_PCT')
+            b_raw      = _gf('B_PCT')
+            a_pct      = int(a_raw) if a_raw.isdigit() else 50
+            b_pct      = int(b_raw) if b_raw.isdigit() else 50
+            reason     = _gf('REASON')
+            scout_tip  = _gf('SCOUT_TIP')
+            edge       = abs(a_pct - b_pct)
+
+            if confidence != 'Low' and edge >= 7 and winner:
+                pick = DailyCurated(
+                    date=today, sport=c['sport'],
+                    competitor_a=c['a'], competitor_b=c['b'],
+                    winner=winner, confidence=confidence,
+                    ai_a_pct=a_pct, ai_b_pct=b_pct,
+                    reason=reason, scout_tip=scout_tip, edge=edge,
+                )
+                db.session.add(pick)
+                db.session.flush()
+                picks.append(pick)
+                if len(picks) >= 3:
+                    break
+        except Exception:
+            continue
+
+    if picks:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    return picks
 
 # ── Events cache ──────────────────────────────────────────────────────────────
 
@@ -504,7 +779,7 @@ def journal_save():
     )
     db.session.add(entry)
     db.session.commit()
-    return jsonify({'ok': True, 'upset_alert': is_upset})
+    return jsonify({'ok': True, 'id': entry.id, 'upset_alert': is_upset})
 
 @app.route('/journal/outcome/<int:entry_id>', methods=['POST'])
 def journal_outcome(entry_id):
@@ -2799,6 +3074,274 @@ def my_squads():
             result.append({'id': sq.id, 'name': sq.name,
                            'member_count': SquadMember.query.filter_by(squad_id=sq.id).count()})
     return jsonify(result)
+
+
+# ── Pick permalink (public) ────────────────────────────────────────────────────
+
+@app.route('/pick/<int:pick_id>')
+def pick_permalink(pick_id):
+    q = Query.query.get_or_404(pick_id)
+    return render_template('pick.html', q=q)
+
+@app.route('/pick/<int:pick_id>/image')
+def pick_image(pick_id):
+    q = Query.query.get_or_404(pick_id)
+    winner_is_a = (q.winner or '').lower() in (q.competitor_a or '').lower()
+    a_pct = q.ai_a_pct or 50
+    b_pct = q.ai_b_pct or (100 - a_pct)
+    img = generate_share_image(
+        q.competitor_a or '', q.competitor_b or '',
+        q.sport or '', a_pct, b_pct,
+        q.winner or '', q.confidence or 'Medium',
+        (q.analysis or '')[:200],
+    )
+    return send_file(img, mimetype='image/png')
+
+# ── Ask Scout follow-up chat (streaming) ──────────────────────────────────────
+
+@app.route('/api/ask-scout', methods=['POST'])
+def ask_scout():
+    if not is_authed():
+        return Response('Unauthorized.', status=401)
+    uid = get_user_uid()
+    if not _rate_limit(f'ask:{uid}', max_calls=20, window=600):
+        return Response('Rate limit reached. Wait a few minutes.', status=429)
+
+    data     = request.get_json() or {}
+    question = data.get('question', '').strip()[:500]
+    query_id = data.get('query_id')
+    analysis = data.get('analysis', '').strip()[:6000]
+    sport    = data.get('sport', '').strip()[:100]
+    comp1    = data.get('comp1', '').strip()[:100]
+    comp2    = data.get('comp2', '').strip()[:100]
+
+    if not question:
+        return Response('Missing question.', status=400)
+
+    if query_id and not analysis:
+        q = Query.query.get(query_id)
+        if q and q.user_uid == uid:
+            analysis = q.analysis or ''
+            sport    = sport or q.sport or ''
+            comp1    = comp1 or q.competitor_a or ''
+            comp2    = comp2 or q.competitor_b or ''
+
+    system_msg = (
+        f"You are Scout, the AI analyst at WhoWins. You just completed this prediction:\n\n"
+        f"{analysis}\n\n"
+        f"Answer the follow-up question concisely and specifically. "
+        f"Be direct, cite the analysis where relevant, and focus on actionable insight."
+    )
+
+    def generate():
+        try:
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            with client.messages.stream(
+                model='claude-opus-4-8', max_tokens=600,
+                system=system_msg,
+                messages=[{'role': 'user', 'content': question}],
+            ) as stream:
+                for chunk in stream.text_stream:
+                    yield chunk
+        except Exception as e:
+            yield f"\n[Error: {e}]"
+
+    return Response(stream_with_context(generate()), content_type='text/plain')
+
+# ── Sport accuracy breakdown ───────────────────────────────────────────────────
+
+@app.route('/api/sport-accuracy')
+def sport_accuracy():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    settled = Query.query.filter(
+        Query.outcome.in_(['win', 'loss']),
+        Query.is_fade == False   # noqa: E712
+    ).all()
+    sport_map = {}
+    for q in settled:
+        sk = (q.sport or 'other').lower().split()[0]
+        d  = sport_map.setdefault(sk, {'wins': 0, 'total': 0, 'high': 0, 'high_wins': 0})
+        d['total'] += 1
+        if q.outcome == 'win':
+            d['wins'] += 1
+        if (q.confidence or '').lower() == 'high':
+            d['high'] += 1
+            if q.outcome == 'win':
+                d['high_wins'] += 1
+    result = []
+    for sk, st in sorted(sport_map.items(), key=lambda x: -x[1]['total']):
+        if st['total'] >= 2:
+            result.append({
+                'sport':      sk.upper(),
+                'wins':       st['wins'],
+                'total':      st['total'],
+                'rate':       round(st['wins'] / st['total'] * 100),
+                'high_rate':  round(st['high_wins'] / st['high'] * 100) if st['high'] else None,
+                'high_total': st['high'],
+            })
+    return jsonify(result)
+
+# ── Line movement check (on-demand) ───────────────────────────────────────────
+
+@app.route('/api/line-check/<int:entry_id>')
+def line_check(entry_id):
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    q = Query.query.get_or_404(entry_id)
+    if q.user_uid != get_user_uid():
+        return jsonify({'error': 'Forbidden'}), 403
+    if not q.a_odds_pct or not q.competitor_a or not q.sport:
+        return jsonify({'movement': None, 'msg': 'No odds data'})
+
+    current = fetch_odds(q.sport, q.competitor_a, q.competitor_b or '')
+    if not current or not current.get('found'):
+        return jsonify({'movement': None, 'msg': 'No current odds'})
+
+    winner_is_a = (q.winner or '').lower() in (q.competitor_a or '').lower()
+    stored_pct  = q.a_odds_pct if winner_is_a else q.b_odds_pct
+    curr_pct    = current.get('a_pct' if winner_is_a else 'b_pct', stored_pct)
+    if stored_pct is None or curr_pct is None:
+        return jsonify({'movement': None})
+
+    delta = round(curr_pct - stored_pct, 1)
+    direction = 'toward' if delta > 0 else 'away'
+    return jsonify({
+        'movement': delta,
+        'direction': direction,
+        'stored_pct': round(stored_pct, 1),
+        'curr_pct': round(curr_pct, 1),
+        'msg': (f"Line moved {abs(delta)}pp {'toward' if delta > 0 else 'away from'} Scout's pick"
+                if abs(delta) >= 2 else 'Line unchanged'),
+    })
+
+# ── Today's curated picks ──────────────────────────────────────────────────────
+
+@app.route('/today')
+def today_picks_page():
+    if not is_authed():
+        return redirect(url_for('login'))
+    return render_template('today.html')
+
+@app.route('/api/today-picks')
+def api_today_picks():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    picks = (DailyCurated.query.filter_by(date=today)
+             .order_by(DailyCurated.edge.desc()).all())
+    return jsonify([{
+        'id':          p.id,
+        'sport':       p.sport,
+        'comp_a':      p.competitor_a,
+        'comp_b':      p.competitor_b,
+        'winner':      p.winner,
+        'confidence':  p.confidence,
+        'ai_a_pct':    p.ai_a_pct,
+        'ai_b_pct':    p.ai_b_pct,
+        'reason':      p.reason,
+        'scout_tip':   p.scout_tip,
+        'edge':        p.edge,
+    } for p in picks])
+
+# ── Push notification routes ───────────────────────────────────────────────────
+
+@app.route('/api/push/public-key')
+def push_public_key():
+    _, public_key = _get_vapid_keys()
+    return jsonify({'key': public_key})
+
+@app.route('/api/push/subscribe', methods=['POST'])
+def push_subscribe():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    uid  = get_user_uid()
+    data = request.get_json() or {}
+    endpoint = data.get('endpoint', '').strip()
+    keys     = data.get('keys', {})
+    if not endpoint or not keys:
+        return jsonify({'error': 'Invalid subscription data'}), 400
+    existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if existing:
+        existing.user_uid  = uid
+        existing.keys_json = json.dumps(keys)
+    else:
+        db.session.add(PushSubscription(
+            user_uid=uid, endpoint=endpoint, keys_json=json.dumps(keys)
+        ))
+    db.session.commit()
+    return jsonify({'ok': True})
+
+@app.route('/admin/push/setup')
+def admin_push_setup():
+    """One-time VAPID key generation — run once then keys are persisted in DB."""
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    priv_row = AppConfig.query.filter_by(key='vapid_private').first()
+    pub_row  = AppConfig.query.filter_by(key='vapid_public').first()
+    if priv_row and pub_row:
+        return jsonify({'ok': True, 'note': 'Already configured', 'public_key': pub_row.value})
+    if not _PUSH_AVAILABLE:
+        return jsonify({'error': 'pywebpush not installed on this dyno'}), 500
+    try:
+        from py_vapid import Vapid
+        v = Vapid()
+        v.generate_keys()
+        priv = v.private_key.decode() if isinstance(v.private_key, bytes) else v.private_key
+        pub  = v.public_key.decode()  if isinstance(v.public_key,  bytes) else v.public_key
+        db.session.add(AppConfig(key='vapid_private', value=priv))
+        db.session.add(AppConfig(key='vapid_public',  value=pub))
+        db.session.commit()
+        return jsonify({'ok': True, 'public_key': pub,
+                        'note': 'Copy public_key to your JS push subscribe call'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/push/send')
+def admin_push_send():
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    title = request.args.get('title', "Scout's Daily Picks Are In")
+    body  = request.args.get('body',  "3 high-confidence picks ready. Check them out.")
+    url   = request.args.get('url',   '/today')
+    subs  = PushSubscription.query.all()
+    sent  = failed = 0
+    for sub in subs:
+        try:
+            info = {'endpoint': sub.endpoint, 'keys': json.loads(sub.keys_json)}
+            if send_push_notification(info, title, body, url):
+                sent += 1
+            else:
+                failed += 1
+        except Exception:
+            failed += 1
+    return jsonify({'sent': sent, 'failed': failed, 'total': len(subs)})
+
+# ── Admin: auto-settle + daily picks ──────────────────────────────────────────
+
+@app.route('/admin/auto-settle')
+def admin_auto_settle():
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        result = _run_auto_settle()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/daily-picks')
+def admin_daily_picks():
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        picks = _generate_daily_picks()
+        return jsonify({'count': len(picks), 'picks': [
+            {'sport': p.sport, 'a': p.competitor_a, 'b': p.competitor_b,
+             'winner': p.winner, 'edge': p.edge}
+            for p in picks
+        ]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
