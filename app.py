@@ -687,6 +687,13 @@ def admin_password():
         return 'Unauthorized.', 403
     return render_template('admin_password.html', password=get_password())
 
+@app.route('/admin/rotate-pw')
+def admin_rotate_pw():
+    if not _safe_eq(request.args.get('key',''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    new_pw = rotate_password()
+    return jsonify({'ok': True, 'new_password': new_pw})
+
 @app.route('/admin/users')
 def admin_users():
     if not _safe_eq(request.args.get('key',''), ADMIN_KEY):
@@ -3318,6 +3325,63 @@ def admin_push_send():
     return jsonify({'sent': sent, 'failed': failed, 'total': len(subs)})
 
 # ── Admin: auto-settle + daily picks ──────────────────────────────────────────
+
+@app.route('/admin/dashboard')
+def admin_dashboard():
+    return render_template('admin_dashboard.html')
+
+@app.route('/api/admin/stats')
+def api_admin_stats():
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    total_users   = UserProfile.query.count()
+    total_queries = Query.query.count()
+    settled       = Query.query.filter(Query.outcome.in_(['win', 'loss'])).count()
+    wins          = Query.query.filter_by(outcome='win').count()
+    pending       = Query.query.filter_by(outcome='pending').count()
+    win_rate      = round(wins / settled * 100) if settled else 0
+    waitlist_ct   = Waitlist.query.count()
+    push_ct       = PushSubscription.query.count()
+    squads_ct     = Squad.query.count()
+    today_str     = datetime.utcnow().strftime('%Y-%m-%d')
+    daily_ct      = DailyCurated.query.filter_by(date=today_str).count()
+    latest_user   = UserProfile.query.order_by(UserProfile.last_seen.desc()).first()
+    _, vapid_pub  = _get_vapid_keys()
+    return jsonify({
+        'total_users':       total_users,
+        'total_queries':     total_queries,
+        'settled':           settled,
+        'wins':              wins,
+        'pending':           pending,
+        'win_rate':          win_rate,
+        'waitlist':          waitlist_ct,
+        'push_subs':         push_ct,
+        'squads':            squads_ct,
+        'daily_picks_today': daily_ct,
+        'password':          get_password(),
+        'vapid_ready':       vapid_pub is not None,
+        'last_active':       latest_user.last_seen.strftime('%b %d, %H:%M UTC') if latest_user else '—',
+    })
+
+@app.route('/api/admin/users-list')
+def api_admin_users_list():
+    if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
+        return jsonify({'error': 'Unauthorized'}), 401
+    users = UserProfile.query.order_by(UserProfile.last_seen.desc()).limit(50).all()
+    result = []
+    for u in users:
+        settled = Query.query.filter(Query.user_uid == u.user_uid, Query.outcome.in_(['win','loss'])).count()
+        wins    = Query.query.filter_by(user_uid=u.user_uid, outcome='win').count()
+        result.append({
+            'handle':    u.handle or get_display_name(u.user_uid),
+            'joined':    u.first_seen.strftime('%b %d'),
+            'last_seen': u.last_seen.strftime('%b %d'),
+            'total':     Query.query.filter_by(user_uid=u.user_uid).count(),
+            'wins':      wins,
+            'settled':   settled,
+            'rate':      round(wins / settled * 100) if settled else 0,
+        })
+    return jsonify(result)
 
 @app.route('/admin/auto-settle')
 def admin_auto_settle():

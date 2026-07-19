@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>WhoWins Admin</title>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WW Admin">
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+  <style>
+    :root {
+      --bg:      #14120f;
+      --surface: #1c1a17;
+      --card:    #232118;
+      --border:  #2e2c28;
+      --text:    #f0ede8;
+      --muted:   #8a8580;
+      --accent:  #7eb8d4;
+      --green:   #7aaa82;
+      --red:     #c97575;
+      --gold:    #c8a84b;
+      --radius:  14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; padding-bottom: 40px; }
+
+    /* Header */
+    .adm-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .adm-logo   { font-size: 1rem; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+    .adm-badge  { font-size: 0.65rem; background: var(--gold); color: #000; border-radius: 4px; padding: 2px 6px; font-weight: 800; letter-spacing: .04em; }
+    .adm-key-status { font-size: 0.72rem; display: flex; align-items: center; gap: 6px; color: var(--muted); }
+    .adm-key-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); display: inline-block; }
+    .adm-key-dot.ready { background: var(--green); }
+
+    /* Key setup */
+    .key-setup { max-width: 480px; margin: 60px auto; padding: 0 20px; text-align: center; }
+    .key-setup h2 { font-size: 1.2rem; margin-bottom: 8px; }
+    .key-setup p  { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+    .key-input-row { display: flex; gap: 8px; }
+    .key-input  { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; color: var(--text); font-size: 0.9rem; }
+    .key-input:focus { outline: none; border-color: var(--accent); }
+
+    /* Layout */
+    .adm-body   { max-width: 600px; margin: 0 auto; padding: 18px 14px 0; display: flex; flex-direction: column; gap: 14px; }
+
+    /* Stats grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    @media (min-width: 440px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
+    .stat-tile  { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 12px; }
+    .stat-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .stat-val   { font-size: 1.5rem; font-weight: 800; }
+    .stat-sub   { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+    .stat-green { color: var(--green); }
+    .stat-gold  { color: var(--gold); }
+    .stat-blue  { color: var(--accent); }
+
+    /* Sections */
+    .adm-section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .adm-section-header { padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+    .adm-section-title  { font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .adm-chevron        { color: var(--muted); font-size: 0.8rem; transition: transform .2s; }
+    .adm-section-body   { padding: 0 16px 16px; border-top: 1px solid var(--border); display: none; }
+    .adm-section.open .adm-section-body  { display: block; }
+    .adm-section.open .adm-chevron       { transform: rotate(90deg); }
+
+    /* Form elements */
+    .adm-label  { font-size: 0.75rem; color: var(--muted); margin: 12px 0 5px; display: block; }
+    .adm-input  { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; color: var(--text); font-size: 0.85rem; font-family: inherit; }
+    .adm-input:focus { outline: none; border-color: var(--accent); }
+    select.adm-input { cursor: pointer; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: 10px; padding: 10px 18px; font-size: 0.85rem; font-weight: 700; cursor: pointer; font-family: inherit; transition: opacity .15s; white-space: nowrap; }
+    .btn:hover    { opacity: .85; }
+    .btn:disabled { opacity: .4; cursor: default; }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-success  { background: var(--green); color: #000; }
+    .btn-danger   { background: var(--red);   color: #fff; }
+    .btn-ghost    { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+    .btn-gold     { background: var(--gold); color: #000; }
+    .btn-sm       { padding: 7px 13px; font-size: 0.78rem; }
+    .btn-row      { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+    /* Result box */
+    .adm-result { margin-top: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; font-size: 0.82rem; line-height: 1.6; display: none; }
+    .adm-result.show { display: block; }
+    .adm-result.ok   { border-color: var(--green); color: var(--green); }
+    .adm-result.err  { border-color: var(--red);   color: var(--red);   }
+    .adm-result.info { color: var(--text); }
+
+    /* Password display */
+    .pw-display { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+    .pw-value   { flex: 1; font-family: monospace; font-size: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 10px 14px; color: var(--gold); letter-spacing: .05em; }
+
+    /* Invite link */
+    .link-box { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .link-input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; font-size: 0.78rem; color: var(--accent); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Users table */
+    .adm-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 10px; }
+    .adm-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; font-size: 0.7rem; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    .adm-table td { padding: 8px 8px; border-bottom: 1px solid rgba(255,255,255,.04); }
+    .adm-table tr:last-child td { border-bottom: none; }
+    .td-rate-good { color: var(--green); font-weight: 700; }
+    .td-rate-bad  { color: var(--red); }
+
+    /* Waitlist */
+    .wl-row { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 0.82rem; display: flex; justify-content: space-between; gap: 12px; }
+    .wl-row:last-child { border-bottom: none; }
+    .wl-email { color: var(--text); font-family: monospace; }
+    .wl-date  { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; }
+
+    /* Push fields */
+    .push-fields { display: none; }
+    .push-fields.show { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="adm-header">
+  <div class="adm-logo">🏆 WhoWins <span class="adm-badge">ADMIN</span></div>
+  <div class="adm-key-status">
+    <span class="adm-key-dot" id="keyDot"></span>
+    <span id="keyStatusText">No key</span>
+    <button class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:0.7rem" onclick="clearKey()">Change</button>
+  </div>
+</div>
+
+<!-- Key setup screen (shown when no key stored) -->
+<div class="key-setup" id="keySetup" style="display:none">
+  <h2>🔐 Admin Key Required</h2>
+  <p>Enter your ADMIN_KEY to unlock the dashboard. It'll be saved locally so you only need to do this once.</p>
+  <div class="key-input-row">
+    <input type="password" id="keyInput" class="key-input" placeholder="Admin key…" autocomplete="off">
+    <button class="btn btn-primary" onclick="saveKey()">Unlock</button>
+  </div>
+  <p id="keyError" style="color:var(--red);font-size:0.78rem;margin-top:10px;display:none">Wrong key. Try again.</p>
+</div>
+
+<!-- Main dashboard -->
+<div class="adm-body" id="mainBody" style="display:none">
+
+  <!-- Stats grid -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-tile"><div class="stat-label">Users</div><div class="stat-val" id="sUsers">…</div></div>
+    <div class="stat-tile"><div class="stat-label">Predictions</div><div class="stat-val" id="sPredictions">…</div></div>
+    <div class="stat-tile"><div class="stat-label">Win Rate</div><div class="stat-val stat-green" id="sWinRate">…</div><div class="stat-sub" id="sRecord"></div></div>
+    <div class="stat-tile"><div class="stat-label">Pending</div><div class="stat-val stat-gold" id="sPending">…</div><div class="stat-sub">unsettled picks</div></div>
+    <div class="stat-tile"><div class="stat-label">Waitlist</div><div class="stat-val stat-blue" id="sWaitlist">…</div></div>
+    <div class="stat-tile"><div class="stat-label">Push Subs</div><div class="stat-val" id="sPush">…</div></div>
+  </div>
+  <div style="font-size:0.72rem;color:var(--muted);text-align:right;margin-top:-6px">Last active: <span id="sLastActive">…</span></div>
+
+  <!-- Auto-Settle -->
+  <div class="adm-section open" id="secSettle">
+    <div class="adm-section-header" onclick="toggle('secSettle')">
+      <div class="adm-section-title">🤖 Auto-Settle Picks</div>
+      <span class="adm-chevron">▶</span>
+    </div>
+    <div class="adm-section-body">
+      <p style="font-size:0.8rem;color:var(--muted);margin-top:12px">Matches pending journal picks against ESPN scoreboards and Tavily search to auto-mark W/L.</p>
+      <div class="btn-row">
+        <button class="btn btn-success" id="btnSettle" onclick="runAutoSettle()">⚡ Run Auto-Settle</button>
+      </div>
+      <div class="adm-result" id="resSettle"></div>
+    </div>
+  </div>
+
+  <!-- Daily Picks -->
+  <div class="adm-section" id="secDaily">
+    <div class="adm-section-header" onclick="toggle('secDaily')">
+      <div class="adm-section-title">🎯 Daily Curated Picks</div>
+      <span class="adm-chevron">▶</span>
+    </div>
+    <div class="adm-section-body">
+      <p style="font-size:0.8rem;color:var(--muted);margin-top:12px">Finds today's top ESPN games, runs full analysis, saves 3 high-confidence picks to /today.</p>
+      <div style="margin-top:10px;font-size:0.8rem;color:var(--muted)">Today's picks so far: <strong id="dailyCount" style="color:var(--text)">…</strong></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnDaily" onclick="runDailyPicks()">🎯 Generate Today's Picks</button>
+      </div>
+      <div class="adm-result" id="resDaily"></div>
+    </div>
+  </div>
+
+  <!-- Push Notification -->
+  <div class="adm-section" id="secPush">
+    <div class="adm-section-header" onclick="toggle('secPush')">
+      <div class="adm-section-title">📲 Push Notification Blast</div>
+      <span class="adm-chevron">▶</span>
+    </div>
+    <div class="adm-section-body">
+      <div style="margin-top:12px;font-size:0.8rem;color:var(--muted)">VAPID ready: <strong id="vapidStatus">…</strong></div>
+      <label class="adm-label">Title</label>
+      <input class="adm-input" id="pushTitle" value="Scout's Daily Picks Are In" maxlength="80">
+      <label class="adm-label">Body</label>
+      <input class="adm-input" id="pushBody" value="3 high-confidence picks ready. Check them out." maxlength="120">
+      <label class="adm-label">URL (optional)</label>
+      <input class="adm-input" id="pushUrl" value="/today" maxlength="200">
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnPush" onclick="sendPush()">📲 Send to All Subscribers</button>
+        <button class="btn btn-ghost" onclick="setupVapid()">🔑 Setup VAPID Keys</button>
+      </div>
+      <div class="adm-result" id="resPush"></div>
+    </div>
+  </div>
+
+  <!-- Invite Link -->
+  <div class="adm-section" id="secInvite">
+    <div class="adm-section-header" onclick="toggle('secInvite')">
+      <div class="adm-section-title">🔗 Invite Links</div>
+      <span class="adm-chevron">▶</span>
+    </div>
+    <div class="adm-section-body">
+      <label class="adm-label">Valid for (days)</label>
+      <select class="adm-input" id="inviteDays" style="width:auto">
+        <option value="3">3 days</option>
+        <option value="7" selected>7 days</option>
+        <option value="14">14 days</option>
+        <option value="30">30 days</option>
+      </select>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnInvite" onclick="genInvite()">🔗 Generate Link</button>
+      </div>
+      <div class="link-box" id="inviteLinkBox" style="display:none">
+        <div class="link-input" id="inviteLinkVal"></div>
+        <button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password -->
+  <div class="adm-section" id="secPassword">
+    <div class="adm-section-header" onclick="toggle('secPassword')">
+      <div class="adm-section-title">🔑 Site Password</div>
+      <span class="adm-chevron">▶</span>
+    </div>
+    <div class="adm-section-body">
+      <p style="font-size:0.8rem;color:var(--muted);margin-top:12px">Current password users enter to log in. Rotating generates a new one and syncs to Render.</p>
+      <div class="pw-display">
+        <div class="pw-value" id="pwValue">…</div>
+        <button class="btn btn-ghost btn-sm" onclick="copyPw()">Copy</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-danger" id="btnRotate" onclick="rotatePw()">🔄 Rotate Password</button>
+      </div>
+      <div class="adm-result" id="resPassword"></div>
+    </div>
+  </div>
+
+  <!-- Waitlist -->
+  <div class="adm-section" id="secWaitlist">
+    <div class="adm-section-header" onclick="toggle('secWaitlist')">
+      <div class="adm-section-title">📋 Waitlist <span id="wlCount" style="font-size:0.75rem;color:var(--muted);font-weight:400"></span></div>
+      <span class="adm-chevron">▶</span>
+    </div>
+    <div class="adm-section-body">
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-ghost" onclick="loadWaitlist()">Load emails</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyAllEmails()">Copy all</button>
+      </div>
+      <div id="wlList" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- Users -->
+  <div class="adm-section" id="secUsers">
+    <div class="adm-section-header" onclick="toggle('secUsers')">
+      <div class="adm-section-title">👥 Top Users</div>
+      <span class="adm-chevron">▶</span>
+    </div>
+    <div class="adm-section-body">
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-ghost" onclick="loadUsers()">Load users</button>
+      </div>
+      <div id="usersList"></div>
+    </div>
+  </div>
+
+</div><!-- /adm-body -->
+
+<script>
+const LS_KEY = 'ww_admin_key';
+let adminKey = '';
+let waitlistData = [];
+
+// ── Boot ─────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  // Check URL param first (e.g. saved homescreen bookmark with ?key=)
+  const urlKey = new URLSearchParams(location.search).get('key');
+  if (urlKey) {
+    localStorage.setItem(LS_KEY, urlKey);
+    // Clean key from URL without reload
+    history.replaceState({}, '', '/admin/dashboard');
+  }
+  adminKey = localStorage.getItem(LS_KEY) || '';
+  if (adminKey) {
+    unlockDashboard();
+  } else {
+    document.getElementById('keySetup').style.display = 'block';
+  }
+});
+
+function saveKey() {
+  const k = document.getElementById('keyInput').value.trim();
+  if (!k) return;
+  // Verify key before saving
+  fetch(`/api/admin/stats?key=${encodeURIComponent(k)}`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        document.getElementById('keyError').style.display = 'block';
+      } else {
+        localStorage.setItem(LS_KEY, k);
+        adminKey = k;
+        document.getElementById('keyError').style.display = 'none';
+        unlockDashboard();
+      }
+    })
+    .catch(() => { document.getElementById('keyError').style.display = 'block'; });
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('keySetup').style.display !== 'none') saveKey();
+});
+
+function clearKey() {
+  localStorage.removeItem(LS_KEY);
+  adminKey = '';
+  document.getElementById('mainBody').style.display  = 'none';
+  document.getElementById('keySetup').style.display  = 'block';
+  document.getElementById('keyDot').classList.remove('ready');
+  document.getElementById('keyStatusText').textContent = 'No key';
+}
+
+function unlockDashboard() {
+  document.getElementById('keySetup').style.display  = 'none';
+  document.getElementById('mainBody').style.display  = 'flex';
+  document.getElementById('keyDot').classList.add('ready');
+  document.getElementById('keyStatusText').textContent = 'Authorized';
+  loadStats();
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const d = await apiFetch('/api/admin/stats');
+    document.getElementById('sUsers').textContent       = d.total_users;
+    document.getElementById('sPredictions').textContent = d.total_queries;
+    document.getElementById('sWinRate').textContent     = d.win_rate + '%';
+    document.getElementById('sRecord').textContent      = `${d.wins}W / ${d.settled - d.wins}L`;
+    document.getElementById('sPending').textContent     = d.pending;
+    document.getElementById('sWaitlist').textContent    = d.waitlist;
+    document.getElementById('sPush').textContent        = d.push_subs;
+    document.getElementById('sLastActive').textContent  = d.last_active;
+    document.getElementById('pwValue').textContent      = d.password;
+    document.getElementById('dailyCount').textContent   = d.daily_picks_today + ' / 3';
+    document.getElementById('wlCount').textContent      = `(${d.waitlist})`;
+    document.getElementById('vapidStatus').textContent  = d.vapid_ready ? '✅ Ready' : '❌ Not set up';
+  } catch (e) {
+    showResult('resSettle', 'Could not load stats — check your key.', 'err');
+  }
+}
+
+// ── Actions ───────────────────────────────────────────────────────────
+async function runAutoSettle() {
+  const btn = document.getElementById('btnSettle');
+  setLoading(btn, 'Running…');
+  try {
+    const d = await apiFetch('/admin/auto-settle');
+    showResult('resSettle', `✅ Settled ${d.settled} pick(s). Failed: ${d.failed}. Total checked: ${d.total}.`, d.settled > 0 ? 'ok' : 'info');
+    loadStats();
+  } catch (e) {
+    showResult('resSettle', '❌ Error: ' + e.message, 'err');
+  }
+  resetBtn(btn, '⚡ Run Auto-Settle');
+}
+
+async function runDailyPicks() {
+  const btn = document.getElementById('btnDaily');
+  setLoading(btn, 'Generating…');
+  try {
+    const d = await apiFetch('/admin/daily-picks');
+    const summary = (d.picks || []).map(p => `${p.a} vs ${p.b} → ${p.winner}`).join('\n');
+    showResult('resDaily', `✅ Generated ${d.count} pick(s).\n${summary}`, 'ok');
+    loadStats();
+  } catch (e) {
+    showResult('resDaily', '❌ Error: ' + e.message, 'err');
+  }
+  resetBtn(btn, '🎯 Generate Today\'s Picks');
+}
+
+async function sendPush() {
+  const title = document.getElementById('pushTitle').value.trim();
+  const body  = document.getElementById('pushBody').value.trim();
+  const url   = document.getElementById('pushUrl').value.trim() || '/today';
+  const btn   = document.getElementById('btnPush');
+  if (!title || !body) { showResult('resPush', 'Title and body required.', 'err'); return; }
+  setLoading(btn, 'Sending…');
+  try {
+    const d = await apiFetch(`/admin/push/send?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&url=${encodeURIComponent(url)}`);
+    showResult('resPush', `✅ Sent to ${d.sent} subscriber(s). Failed: ${d.failed}.`, 'ok');
+  } catch (e) {
+    showResult('resPush', '❌ Error: ' + e.message, 'err');
+  }
+  resetBtn(btn, '📲 Send to All Subscribers');
+}
+
+async function setupVapid() {
+  try {
+    const d = await apiFetch('/admin/push/setup');
+    showResult('resPush', d.note
+      ? `ℹ️ ${d.note}: ${d.public_key || ''}`
+      : `✅ VAPID keys generated. Public key:\n${d.public_key}`, 'ok');
+    loadStats();
+  } catch (e) {
+    showResult('resPush', '❌ ' + e.message, 'err');
+  }
+}
+
+async function genInvite() {
+  const days = document.getElementById('inviteDays').value;
+  const btn  = document.getElementById('btnInvite');
+  setLoading(btn, 'Generating…');
+  try {
+    const d = await apiFetch(`/admin/invite-link?days=${days}`);
+    document.getElementById('inviteLinkVal').textContent = d.link;
+    document.getElementById('inviteLinkBox').style.display = 'flex';
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+  resetBtn(btn, '🔗 Generate Link');
+}
+
+function copyInviteLink() {
+  const link = document.getElementById('inviteLinkVal').textContent;
+  copyText(link, '✅ Link copied!', 'invite link');
+}
+
+async function rotatePw() {
+  if (!confirm('Rotate the site password? Everyone will need the new one to log in.')) return;
+  const btn = document.getElementById('btnRotate');
+  setLoading(btn, 'Rotating…');
+  try {
+    const res = await fetch('/admin/rotate-pw?key=' + encodeURIComponent(adminKey));
+    const d   = await res.json();
+    document.getElementById('pwValue').textContent = d.new_password || d.password || '—';
+    showResult('resPassword', '✅ Password rotated and synced to Render.', 'ok');
+    loadStats();
+  } catch (e) {
+    showResult('resPassword', '❌ ' + e.message, 'err');
+  }
+  resetBtn(btn, '🔄 Rotate Password');
+}
+
+function copyPw() {
+  const pw = document.getElementById('pwValue').textContent;
+  copyText(pw, '✅ Password copied!', 'password');
+}
+
+async function loadWaitlist() {
+  const container = document.getElementById('wlList');
+  container.innerHTML = '<div style="color:var(--muted);font-size:0.8rem">Loading…</div>';
+  try {
+    const data = await apiFetch('/admin/waitlist');
+    waitlistData = data;
+    if (!data.length) { container.innerHTML = '<div style="color:var(--muted);font-size:0.8rem">No waitlist entries yet.</div>'; return; }
+    container.innerHTML = data.map(e => `
+      <div class="wl-row">
+        <span class="wl-email">${e.email}</span>
+        <span class="wl-date">${e.created_at.split('T')[0]}</span>
+      </div>`).join('');
+  } catch (e) {
+    container.innerHTML = '<div style="color:var(--red);font-size:0.8rem">Error loading waitlist.</div>';
+  }
+}
+
+async function copyAllEmails() {
+  if (!waitlistData.length) await loadWaitlist();
+  const emails = waitlistData.map(e => e.email).join('\n');
+  copyText(emails, `✅ Copied ${waitlistData.length} email(s)!`, 'emails');
+}
+
+async function loadUsers() {
+  const container = document.getElementById('usersList');
+  container.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;margin-top:8px">Loading…</div>';
+  try {
+    const data = await apiFetch('/api/admin/users-list');
+    if (!data.length) { container.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;margin-top:8px">No users yet.</div>'; return; }
+    container.innerHTML = `
+      <table class="adm-table">
+        <thead><tr><th>Handle</th><th>Joined</th><th>Picks</th><th>Win%</th></tr></thead>
+        <tbody>${data.map(u => `
+          <tr>
+            <td>${u.handle}</td>
+            <td style="color:var(--muted)">${u.joined}</td>
+            <td>${u.total}</td>
+            <td class="${u.rate >= 60 ? 'td-rate-good' : u.rate > 0 && u.rate < 45 ? 'td-rate-bad' : ''}">${u.settled ? u.rate + '%' : '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (e) {
+    container.innerHTML = '<div style="color:var(--red);font-size:0.8rem">Error loading users.</div>';
+  }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  const sep = path.includes('?') ? '&' : '?';
+  const res = await fetch(path + sep + 'key=' + encodeURIComponent(adminKey));
+  const d   = await res.json();
+  if (d.error) throw new Error(d.error);
+  return d;
+}
+
+function showResult(id, msg, cls = 'info') {
+  const el = document.getElementById(id);
+  el.textContent  = msg;
+  el.className    = 'adm-result show ' + cls;
+}
+
+function setLoading(btn, label) {
+  btn.disabled     = true;
+  btn.innerHTML    = `<span class="spinner"></span> ${label}`;
+}
+
+function resetBtn(btn, label) {
+  btn.disabled  = false;
+  btn.textContent = label;
+}
+
+function copyText(text, successMsg, fallbackLabel) {
+  navigator.clipboard.writeText(text)
+    .then(() => alert(successMsg))
+    .catch(() => prompt(`Copy the ${fallbackLabel}:`, text));
+}
+
+function toggle(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+// Key input: enter key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('keyInput')) saveKey();
+});
+</script>
+</body>
+</html>
