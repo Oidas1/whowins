@@ -86,7 +86,6 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 TAVILY_API_KEY    = os.environ.get('TAVILY_API_KEY', '')
 ODDS_API_KEY      = os.environ.get('ODDS_API_KEY', '')
 ADMIN_KEY         = os.environ.get('ADMIN_KEY', 'adminkey123')
-print(f"[WhoWins] ADMIN_KEY={ADMIN_KEY}", flush=True)
 RENDER_API_KEY    = os.environ.get('RENDER_API_KEY', '')
 RENDER_SERVICE_ID = os.environ.get('RENDER_SERVICE_ID', '')
 
@@ -227,7 +226,26 @@ with app.app_context():
                 app.secret_key = sk
         except Exception as e:
             print(f"Warning: could not pin SECRET_KEY in DB: {e}")
-            # Falls back to the value already set at module level
+        # Pin ADMIN_KEY in DB so it survives redeploys and is always recoverable from logs
+        try:
+            ak_row = AppConfig.query.filter_by(key='admin_key').first()
+            if ak_row:
+                ADMIN_KEY = ak_row.value
+            else:
+                ak = os.environ.get('ADMIN_KEY', 'adminkey123')
+                try:
+                    db.session.add(AppConfig(key='admin_key', value=ak))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    ak_row = AppConfig.query.filter_by(key='admin_key').first()
+                    if ak_row:
+                        ak = ak_row.value
+                ADMIN_KEY = ak
+            print(f"[WhoWins] ADMIN_KEY={ADMIN_KEY}", flush=True)
+        except Exception as e:
+            print(f"Warning: could not pin ADMIN_KEY in DB: {e}")
+            print(f"[WhoWins] ADMIN_KEY={ADMIN_KEY}", flush=True)
     except Exception as e:
         print(f"Warning: could not create tables on startup: {e}")
 
