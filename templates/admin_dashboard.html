@@ -293,38 +293,66 @@ let waitlistData = [];
 
 // ── Boot ─────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  // Check URL param first (e.g. saved homescreen bookmark with ?key=)
   const urlKey = new URLSearchParams(location.search).get('key');
   if (urlKey) {
     localStorage.setItem(LS_KEY, urlKey);
-    // Clean key from URL without reload
     history.replaceState({}, '', '/admin/dashboard');
   }
   adminKey = localStorage.getItem(LS_KEY) || '';
   if (adminKey) {
-    unlockDashboard();
+    verifyAndUnlock(adminKey);
   } else {
     document.getElementById('keySetup').style.display = 'block';
   }
 });
 
-function saveKey() {
+async function saveKey() {
   const k = document.getElementById('keyInput').value.trim();
   if (!k) return;
-  // Verify key before saving
-  fetch(`/api/admin/stats?key=${encodeURIComponent(k)}`)
-    .then(r => r.json())
-    .then(d => {
-      if (d.error) {
-        document.getElementById('keyError').style.display = 'block';
-      } else {
-        localStorage.setItem(LS_KEY, k);
-        adminKey = k;
-        document.getElementById('keyError').style.display = 'none';
-        unlockDashboard();
-      }
-    })
-    .catch(() => { document.getElementById('keyError').style.display = 'block'; });
+  const errEl = document.getElementById('keyError');
+  errEl.textContent = 'Checking…';
+  errEl.style.display = 'block';
+  errEl.style.color = 'var(--muted)';
+  await verifyAndUnlock(k);
+}
+
+async function verifyAndUnlock(k) {
+  // Always verify the key against the server before showing anything
+  let d;
+  try {
+    const res = await fetch(`/api/admin/stats?key=${encodeURIComponent(k)}`);
+    const ct  = res.headers.get('content-type') || '';
+    if (!ct.includes('json')) {
+      throw new Error(`Server returned ${res.status} (not JSON — Render may still be starting up)`);
+    }
+    d = await res.json();
+  } catch (e) {
+    showKeyError('Connection failed: ' + e.message);
+    document.getElementById('keySetup').style.display = 'block';
+    return;
+  }
+
+  if (d.error) {
+    showKeyError(d.error === 'Unauthorized' ? 'Wrong admin key. Try again.' : d.error);
+    document.getElementById('keySetup').style.display = 'block';
+    return;
+  }
+
+  // Key is valid
+  localStorage.setItem(LS_KEY, k);
+  adminKey = k;
+  document.getElementById('keySetup').style.display = 'none';
+  document.getElementById('mainBody').style.display  = 'flex';
+  document.getElementById('keyDot').classList.add('ready');
+  document.getElementById('keyStatusText').textContent = 'Authorized';
+  populateStats(d);   // use the response we already have — no second fetch needed
+}
+
+function showKeyError(msg) {
+  const el = document.getElementById('keyError');
+  el.textContent  = msg;
+  el.style.color  = 'var(--red)';
+  el.style.display = 'block';
 }
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && document.getElementById('keySetup').style.display !== 'none') saveKey();
@@ -337,35 +365,44 @@ function clearKey() {
   document.getElementById('keySetup').style.display  = 'block';
   document.getElementById('keyDot').classList.remove('ready');
   document.getElementById('keyStatusText').textContent = 'No key';
-}
-
-function unlockDashboard() {
-  document.getElementById('keySetup').style.display  = 'none';
-  document.getElementById('mainBody').style.display  = 'flex';
-  document.getElementById('keyDot').classList.add('ready');
-  document.getElementById('keyStatusText').textContent = 'Authorized';
-  loadStats();
+  document.getElementById('keyInput').value = '';
+  document.getElementById('keyError').style.display = 'none';
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────
+function populateStats(d) {
+  document.getElementById('sUsers').textContent       = d.total_users ?? '—';
+  document.getElementById('sPredictions').textContent = d.total_queries ?? '—';
+  document.getElementById('sWinRate').textContent     = (d.win_rate ?? '—') + (d.win_rate != null ? '%' : '');
+  document.getElementById('sRecord').textContent      = d.wins != null ? `${d.wins}W / ${(d.settled - d.wins)}L` : '';
+  document.getElementById('sPending').textContent     = d.pending ?? '—';
+  document.getElementById('sWaitlist').textContent    = d.waitlist ?? '—';
+  document.getElementById('sPush').textContent        = d.push_subs ?? '—';
+  document.getElementById('sLastActive').textContent  = d.last_active ?? '—';
+  document.getElementById('pwValue').textContent      = d.password   ?? '—';
+  document.getElementById('dailyCount').textContent   = (d.daily_picks_today ?? '—') + ' / 3';
+  document.getElementById('wlCount').textContent      = `(${d.waitlist ?? 0})`;
+  document.getElementById('vapidStatus').textContent  = d.vapid_ready ? '✅ Ready' : '❌ Not set up';
+}
+
 async function loadStats() {
   try {
     const d = await apiFetch('/api/admin/stats');
-    document.getElementById('sUsers').textContent       = d.total_users;
-    document.getElementById('sPredictions').textContent = d.total_queries;
-    document.getElementById('sWinRate').textContent     = d.win_rate + '%';
-    document.getElementById('sRecord').textContent      = `${d.wins}W / ${d.settled - d.wins}L`;
-    document.getElementById('sPending').textContent     = d.pending;
-    document.getElementById('sWaitlist').textContent    = d.waitlist;
-    document.getElementById('sPush').textContent        = d.push_subs;
-    document.getElementById('sLastActive').textContent  = d.last_active;
-    document.getElementById('pwValue').textContent      = d.password;
-    document.getElementById('dailyCount').textContent   = d.daily_picks_today + ' / 3';
-    document.getElementById('wlCount').textContent      = `(${d.waitlist})`;
-    document.getElementById('vapidStatus').textContent  = d.vapid_ready ? '✅ Ready' : '❌ Not set up';
+    populateStats(d);
   } catch (e) {
-    showResult('resSettle', 'Could not load stats — check your key.', 'err');
+    showTopError('Stats error: ' + e.message);
   }
+}
+
+function showTopError(msg) {
+  let el = document.getElementById('topError');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'topError';
+    el.style.cssText = 'background:rgba(201,117,117,.15);border:1px solid var(--red);border-radius:10px;padding:10px 14px;font-size:0.82rem;color:var(--red);margin-bottom:4px';
+    document.getElementById('mainBody').prepend(el);
+  }
+  el.textContent = '⚠️ ' + msg;
 }
 
 // ── Actions ───────────────────────────────────────────────────────────
@@ -448,11 +485,9 @@ async function rotatePw() {
   const btn = document.getElementById('btnRotate');
   setLoading(btn, 'Rotating…');
   try {
-    const res = await fetch('/admin/rotate-pw?key=' + encodeURIComponent(adminKey));
-    const d   = await res.json();
-    document.getElementById('pwValue').textContent = d.new_password || d.password || '—';
+    const d = await apiFetch('/admin/rotate-pw');
+    document.getElementById('pwValue').textContent = d.new_password || '—';
     showResult('resPassword', '✅ Password rotated and synced to Render.', 'ok');
-    loadStats();
   } catch (e) {
     showResult('resPassword', '❌ ' + e.message, 'err');
   }
@@ -514,8 +549,12 @@ async function loadUsers() {
 async function apiFetch(path) {
   const sep = path.includes('?') ? '&' : '?';
   const res = await fetch(path + sep + 'key=' + encodeURIComponent(adminKey));
-  const d   = await res.json();
-  if (d.error) throw new Error(d.error);
+  const ct  = res.headers.get('content-type') || '';
+  if (!ct.includes('json')) {
+    throw new Error(`Server error ${res.status} — check Render logs`);
+  }
+  const d = await res.json();
+  if (d && d.error) throw new Error(d.error);
   return d;
 }
 

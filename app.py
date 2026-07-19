@@ -2855,9 +2855,13 @@ def waitlist_page():
 def admin_waitlist():
     if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
         return jsonify({'error': 'Unauthorized'}), 401
-    entries = Waitlist.query.order_by(Waitlist.created_at.desc()).all()
-    return jsonify([{'email': e.email, 'source': e.source,
-                     'created_at': e.created_at.isoformat()} for e in entries])
+    try:
+        entries = Waitlist.query.order_by(Waitlist.created_at.desc()).all()
+        return jsonify([{'email': e.email, 'source': e.source,
+                         'created_at': e.created_at.isoformat()} for e in entries])
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 # ── Public profile ────────────────────────────────────────────────────────────
@@ -3334,54 +3338,73 @@ def admin_dashboard():
 def api_admin_stats():
     if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
         return jsonify({'error': 'Unauthorized'}), 401
-    total_users   = UserProfile.query.count()
-    total_queries = Query.query.count()
-    settled       = Query.query.filter(Query.outcome.in_(['win', 'loss'])).count()
-    wins          = Query.query.filter_by(outcome='win').count()
-    pending       = Query.query.filter_by(outcome='pending').count()
-    win_rate      = round(wins / settled * 100) if settled else 0
-    waitlist_ct   = Waitlist.query.count()
-    push_ct       = PushSubscription.query.count()
-    squads_ct     = Squad.query.count()
-    today_str     = datetime.utcnow().strftime('%Y-%m-%d')
-    daily_ct      = DailyCurated.query.filter_by(date=today_str).count()
-    latest_user   = UserProfile.query.order_by(UserProfile.last_seen.desc()).first()
-    _, vapid_pub  = _get_vapid_keys()
-    return jsonify({
-        'total_users':       total_users,
-        'total_queries':     total_queries,
-        'settled':           settled,
-        'wins':              wins,
-        'pending':           pending,
-        'win_rate':          win_rate,
-        'waitlist':          waitlist_ct,
-        'push_subs':         push_ct,
-        'squads':            squads_ct,
-        'daily_picks_today': daily_ct,
-        'password':          get_password(),
-        'vapid_ready':       vapid_pub is not None,
-        'last_active':       latest_user.last_seen.strftime('%b %d, %H:%M UTC') if latest_user else '—',
-    })
+    try:
+        total_users   = UserProfile.query.count()
+        total_queries = Query.query.count()
+        settled       = Query.query.filter(Query.outcome.in_(['win', 'loss'])).count()
+        wins          = Query.query.filter_by(outcome='win').count()
+        pending       = Query.query.filter_by(outcome='pending').count()
+        win_rate      = round(wins / settled * 100) if settled else 0
+        waitlist_ct   = Waitlist.query.count()
+        squads_ct     = Squad.query.count()
+        latest_user   = UserProfile.query.order_by(UserProfile.last_seen.desc()).first()
+        _, vapid_pub  = _get_vapid_keys()
+
+        # New tables — may not exist on older deployments, handle gracefully
+        try:
+            push_ct = PushSubscription.query.count()
+        except Exception:
+            db.session.rollback()
+            push_ct = 0
+        try:
+            today_str = datetime.utcnow().strftime('%Y-%m-%d')
+            daily_ct  = DailyCurated.query.filter_by(date=today_str).count()
+        except Exception:
+            db.session.rollback()
+            daily_ct = 0
+
+        return jsonify({
+            'total_users':       total_users,
+            'total_queries':     total_queries,
+            'settled':           settled,
+            'wins':              wins,
+            'pending':           pending,
+            'win_rate':          win_rate,
+            'waitlist':          waitlist_ct,
+            'push_subs':         push_ct,
+            'squads':            squads_ct,
+            'daily_picks_today': daily_ct,
+            'password':          get_password(),
+            'vapid_ready':       vapid_pub is not None,
+            'last_active':       latest_user.last_seen.strftime('%b %d, %H:%M UTC') if latest_user else '—',
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/users-list')
 def api_admin_users_list():
     if not _safe_eq(request.args.get('key', ''), ADMIN_KEY):
         return jsonify({'error': 'Unauthorized'}), 401
-    users = UserProfile.query.order_by(UserProfile.last_seen.desc()).limit(50).all()
-    result = []
-    for u in users:
-        settled = Query.query.filter(Query.user_uid == u.user_uid, Query.outcome.in_(['win','loss'])).count()
-        wins    = Query.query.filter_by(user_uid=u.user_uid, outcome='win').count()
-        result.append({
-            'handle':    u.handle or get_display_name(u.user_uid),
-            'joined':    u.first_seen.strftime('%b %d'),
-            'last_seen': u.last_seen.strftime('%b %d'),
-            'total':     Query.query.filter_by(user_uid=u.user_uid).count(),
-            'wins':      wins,
-            'settled':   settled,
-            'rate':      round(wins / settled * 100) if settled else 0,
-        })
-    return jsonify(result)
+    try:
+        users = UserProfile.query.order_by(UserProfile.last_seen.desc()).limit(50).all()
+        result = []
+        for u in users:
+            settled = Query.query.filter(Query.user_uid == u.user_uid, Query.outcome.in_(['win','loss'])).count()
+            wins    = Query.query.filter_by(user_uid=u.user_uid, outcome='win').count()
+            result.append({
+                'handle':    u.handle or get_display_name(u.user_uid),
+                'joined':    u.first_seen.strftime('%b %d'),
+                'last_seen': u.last_seen.strftime('%b %d'),
+                'total':     Query.query.filter_by(user_uid=u.user_uid).count(),
+                'wins':      wins,
+                'settled':   settled,
+                'rate':      round(wins / settled * 100) if settled else 0,
+            })
+        return jsonify(result)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/admin/auto-settle')
 def admin_auto_settle():
