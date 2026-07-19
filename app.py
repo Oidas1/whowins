@@ -495,6 +495,18 @@ KNOW_A: [everything you know about {comp1} in the context of {sport} — ranking
   NAME COLLISION RULE: If {comp1} is a common name that belongs to a famous person in a DIFFERENT sport, reason explicitly: "There is a famous [other sport] player named {comp1}, but in the context of {sport}, I am analyzing [name] as a {sport} competitor. Any UTR/ranking data from live research refers to the {sport} version of this person." Use all available data — UTR ratings, rankings, records — for the {sport} context. Do NOT discard live research data because of a name collision; instead interpret it correctly.]
 KNOW_B: [same depth and same name-collision reasoning for {comp2}]
 
+STEP 0.25 — BASE RATE ANCHOR:
+Before any individual adjustments, establish the historical base rate for this TYPE of matchup. This is your statistical prior — do not stray more than 20-25% from it without multiple strong signals.
+  Tennis: Top-10 vs Top-50 ≈ 65-70%; #1 vs #10 ≈ 62%; similar-ranked players ≈ 50-55%
+  NBA/NFL: Home favorite ≈ 65-70%; road favorite ≈ 55-60%; home underdog ≈ 40%
+  Soccer: Home team wins ≈ 46% of all games; draw ≈ 26%; away ≈ 28%
+  MMA/Boxing: Champion vs. ranked challenger ≈ 60-65%; similar-ranked ≈ 50-55%
+  Politics: Incumbent in general election ≈ 70-75% historically; challenger primary ≈ varies
+  Crypto/Finance: Past price momentum predicts next-period direction ≈ 55% (weak signal)
+  Entertainment awards: Critical consensus front-runner wins ≈ 60-70% of the time
+  Generic unknown: Start at 50%.
+  NOTE: If your research reveals a dramatically different base rate (e.g., an all-time dominant player), document it explicitly and justify the deviation.
+
 STEP 0.5 — STYLE MATCHUP ANALYSIS (sports only):
 Before running math, analyze HOW each competitor plays and whether one style systematically beats the other:
 - Offensive/defensive identity: does one impose their game, the other react?
@@ -511,6 +523,24 @@ Rankings are backward-looking aggregates. Do NOT let #1 ranking alone push proba
 • Is the lower-ranked competitor on a recent hot streak, trending up, or peaking at the right time?
 • Is the higher-ranked competitor defending a ranking vs actually being in form right now?
 A #1 player or top seed deserves meaningful weight — but a lower-ranked competitor with favorable conditions, strong H2H, a style advantage, or strong recent form can realistically sit at 35-50% probability. Never let a ranking alone settle the analysis.
+
+CONDITIONS ANALYSIS (always evaluate — these factors shift probability independently of skill):
+  VENUE / HOME ADVANTAGE:
+    Is this at a neutral site, or does one side have home advantage? Home advantage in team sports = +3-6%.
+    For individual sports: is this a tournament where one player has historically performed well?
+  REST & SCHEDULE:
+    How many days since each competitor's last competition? Ideal rest = 2-5 days for most sports.
+    Back-to-back games, 4th game in 5 nights, grueling recent schedule → -3-7% for fatigued side.
+  TRAVEL & TIMEZONE:
+    International travel across >3 time zones → -2-4%. Long east-west travel same day = meaningful factor.
+  SURFACE / FORMAT / ENVIRONMENT:
+    Tennis: clay vs. hard vs. grass can shift probabilities 10-15% for style-dependent players.
+    Outdoor sports: heavy rain or extreme heat neutralizes technical advantage → pushes toward 50/50.
+    Playoff format vs. best-of vs. single-game: high-variance formats benefit underdogs.
+  MOTIVATION / STAKES:
+    Elimination game: underdog desperation may close gap. Meaningless game: favorite may coast.
+    Revenge match, grudge factor, or personal stakes often elevates underdog intensity.
+  Apply any relevant conditions adjustments BEFORE reaching Step 1.
 
 STEP 1 — DOMAIN-SPECIFIC ANALYTICAL BASELINE:
 Identify the domain from TOPIC and apply the appropriate model:
@@ -560,7 +590,9 @@ STEP 3 — QUANTIFIED ADJUSTMENTS (add/subtract %):
 STEP 4 — BAYESIAN UPDATE (when market odds provided above):
   P_final = (W x P_analysis) + ((1-W) x P_market)
   W = 0.65 (High confidence), 0.50 (Medium), 0.35 (Low)
-  Market divergence >15% = re-examine assumptions, but hold if evidence is strong.
+  LIQUIDITY WEIGHTING: Prediction markets aggregate thousands of informed bettors. High-volume markets (>$100k 24h) are highly efficient — reduce W by 0.10 (give market more weight). Low-volume markets (<$5k) are thin/noisy — increase W by 0.10 (trust your analysis more).
+  CONSENSUS RULE: When Vegas AND Polymarket AND Kalshi all converge within 5% of each other, treat this as very strong evidence. Only deviate from market consensus when you have a specific, verifiable edge the market may not have priced in.
+  Market divergence >15% = re-examine your assumptions from Step 1. If your data is solid, hold. If research was thin, defer to market.
 
 STEP 5 — IT FACTOR + COMEBACK DNA (+/-8% combined):
   Will to win / competitive drive under maximum pressure.
@@ -575,6 +607,16 @@ STEP 5 — IT FACTOR + COMEBACK DNA (+/-8% combined):
   • Politics/markets: closing large polling gaps in final weeks
   • General: historical pattern of reversing unfavorable odds under pressure
   If one competitor has clearly stronger comeback ability AND the matchup is within 20%, apply +2-5% for the better comeback competitor. This is especially relevant when the underdog has a documented "never say die" pattern. Note it explicitly in COMEBACK_ALERT.
+
+STEP 5.5 — DEVIL'S ADVOCATE (run this before finalizing):
+  Argue the STRONGEST REALISTIC CASE for the competitor you're currently predicting to LOSE.
+  What specific scenario leads to an upset?
+  • Is there a style matchup disadvantage for the favorite that only shows up under pressure?
+  • Could the underdog's best-case recent form beat the favorite's worst-case recent form?
+  • Is there a key X-factor (surface, format, crowd, revenge motivation) that neutralizes the skill gap?
+  • Has the predicted loser beaten or nearly beaten this exact type of opponent before?
+  After arguing their case: does it move your probability by >5%? If YES → adjust. If NO → document it in SCOUT_TIP as the main risk.
+  This step MUST change something: either your probability OR your SCOUT_TIP. It cannot be skipped.
 
 STEP 6 — FINAL:
   Combine all steps. Cap at 95%, floor at 5%.
@@ -712,10 +754,14 @@ def build_prompt(sport, comp1, comp2, context):
         threading.Thread(target=fetch, args=('comp1', research_competitor, comp1, sport)),
         threading.Thread(target=fetch, args=('comp2', research_competitor, comp2, sport)),
         threading.Thread(target=fetch, args=('h2h', web_search,
-            f"{comp1} vs {comp2} {sport} head to head history results", "basic", 4)),
+            f"{comp1} vs {comp2} {sport} head to head career history results", "basic", 4)),
         threading.Thread(target=fetch, args=('odds', fetch_odds, sport, comp1, comp2)),
         threading.Thread(target=fetch, args=('news', web_search,
             f"{comp1} OR {comp2} {sport} injury news update latest", "basic", 3)),
+        threading.Thread(target=fetch, args=('recent_h2h', web_search,
+            f"{comp1} vs {comp2} {sport} 2025 2026 recent match results", "basic", 3)),
+        threading.Thread(target=fetch, args=('conditions', web_search,
+            f"{comp1} vs {comp2} {sport} venue location home away schedule rest days", "basic", 3)),
     ]
     if is_tennis:
         threads += [
@@ -752,12 +798,15 @@ def build_prompt(sport, comp1, comp2, context):
         )
 
     search_block = utr_block  # UTR data takes priority for tennis
-    if research.get('comp1') or research.get('comp2') or research.get('h2h') or research.get('news'):
+    has_research = any(research.get(k) for k in ('comp1','comp2','h2h','news','recent_h2h','conditions'))
+    if has_research:
         search_block += '\n\nSUPPLEMENTAL RESEARCH (use to verify/update training knowledge):\n'
-        if research.get('news'):  search_block += f'\n[BREAKING NEWS / INJURIES]\n{research["news"]}\n'
-        if research.get('comp1'): search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
-        if research.get('comp2'): search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
-        if research.get('h2h'):  search_block += f'\n[HEAD-TO-HEAD]\n{research["h2h"]}\n'
+        if research.get('news'):       search_block += f'\n[BREAKING NEWS / INJURIES]\n{research["news"]}\n'
+        if research.get('conditions'): search_block += f'\n[CONDITIONS: VENUE / REST / SCHEDULE]\n{research["conditions"]}\n'
+        if research.get('comp1'):      search_block += f'\n[RESEARCH: {comp1}]\n{research["comp1"]}\n'
+        if research.get('comp2'):      search_block += f'\n[RESEARCH: {comp2}]\n{research["comp2"]}\n'
+        if research.get('h2h'):        search_block += f'\n[HEAD-TO-HEAD (career)]\n{research["h2h"]}\n'
+        if research.get('recent_h2h'): search_block += f'\n[HEAD-TO-HEAD (recent — 2025/2026)]\n{research["recent_h2h"]}\n'
 
     context_block = f'\nAdditional context: {context}' if context.strip() else ''
 
@@ -1442,6 +1491,35 @@ def api_accuracy():
     correct = Query.query.filter_by(outcome='win').count()
     rate    = round((correct / total) * 100) if total else None
     return jsonify({'total': total, 'correct': correct, 'rate': rate})
+
+@app.route('/api/calibration')
+def api_calibration():
+    if not is_authed():
+        return jsonify({'error': 'Unauthorized'}), 401
+    settled = Query.query.filter(Query.outcome != 'pending').all()
+    buckets = {
+        'High':   {'wins': 0, 'total': 0},
+        'Medium': {'wins': 0, 'total': 0},
+        'Low':    {'wins': 0, 'total': 0},
+    }
+    for q in settled:
+        conf = (q.confidence or 'Medium').strip().capitalize()
+        if conf not in buckets:
+            conf = 'Medium'
+        buckets[conf]['total'] += 1
+        if q.outcome == 'win':
+            buckets[conf]['wins'] += 1
+
+    result = {}
+    for conf, d in buckets.items():
+        result[conf.lower()] = {
+            'total': d['total'],
+            'wins':  d['wins'],
+            'rate':  round(d['wins'] / d['total'] * 100) if d['total'] >= 3 else None,
+        }
+    # Well-calibrated targets: High~72%, Medium~60%, Low~48%
+    result['targets'] = {'high': 72, 'medium': 60, 'low': 48}
+    return jsonify(result)
 
 # ── Upcoming Events ───────────────────────────────────────────────────────────
 

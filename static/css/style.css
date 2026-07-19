@@ -2287,3 +2287,77 @@ button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
   line-height: 1.5;
   text-align: center;
 }
+
+/* ── Confidence Calibration ───────────────────────── */
+.calibration-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-top: 20px;
+}
+.calibration-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.calibration-desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.calib-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.calib-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 76px;
+  flex-shrink: 0;
+}
+.calib-bar-wrap { flex: 1; }
+.calib-bar-track {
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 4px;
+  position: relative;
+  overflow: visible;
+}
+.calib-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.8s ease;
+}
+.calib-target-line {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  background: var(--muted);
+  border-radius: 1px;
+  transform: translateX(-50%);
+}
+.calib-nums {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 170px;
+  flex-shrink: 0;
+}
+.calib-rate {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--text);
+  min-width: 36px;
+}
+.calib-total { font-size: 0.72rem; color: var(--muted); }
+.calib-diff  { font-size: 0.72rem; font-weight: 600; }
+.calib-above { color: var(--green); }
+.calib-below { color: var(--red); }

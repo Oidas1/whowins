@@ -108,7 +108,63 @@
       <a href="/" class="btn-new">Run a prediction →</a>
     </div>
     {% endif %}
+
+    <!-- Confidence Calibration -->
+    <div class="calibration-section" id="calibrationSection" style="display:none">
+      <div class="calibration-title">🎯 Scout Calibration</div>
+      <p class="calibration-desc">When Scout says "High confidence," does it win ~72% of the time? Good calibration means the numbers mean something.</p>
+      <div class="calibration-rows" id="calibrationRows"></div>
+    </div>
+
   </div>
 </main>
+
+<script>
+async function loadCalibration() {
+  try {
+    const res  = await fetch('/api/calibration');
+    const data = await res.json();
+    const labels = { high: '🔥 High', medium: '⚡ Medium', low: '🎲 Low' };
+    const targets = data.targets || { high: 72, medium: 60, low: 48 };
+    let html = '';
+    let hasData = false;
+
+    ['high','medium','low'].forEach(conf => {
+      const d = data[conf];
+      if (!d || d.total < 3) return;
+      hasData = true;
+      const rate    = d.rate !== null ? d.rate : '—';
+      const target  = targets[conf];
+      const diff    = d.rate !== null ? d.rate - target : null;
+      const diffStr = diff !== null ? (diff >= 0 ? `+${diff}pp vs target` : `${diff}pp vs target`) : '';
+      const diffCls = diff !== null ? (diff >= 0 ? 'calib-above' : 'calib-below') : '';
+      const fillW   = d.rate !== null ? Math.min(d.rate, 100) : 0;
+      const targW   = Math.min(target, 100);
+
+      html += `
+        <div class="calib-row">
+          <div class="calib-label">${labels[conf]}</div>
+          <div class="calib-bar-wrap">
+            <div class="calib-bar-track">
+              <div class="calib-bar-fill" style="width:${fillW}%"></div>
+              <div class="calib-target-line" style="left:${targW}%" title="Target ${target}%"></div>
+            </div>
+          </div>
+          <div class="calib-nums">
+            <span class="calib-rate">${rate !== '—' ? rate + '%' : '—'}</span>
+            <span class="calib-total">(${d.wins}/${d.total})</span>
+            ${diffStr ? `<span class="calib-diff ${diffCls}">${diffStr}</span>` : ''}
+          </div>
+        </div>`;
+    });
+
+    if (hasData) {
+      document.getElementById('calibrationRows').innerHTML = html;
+      document.getElementById('calibrationSection').style.display = 'block';
+    }
+  } catch (_) {}
+}
+loadCalibration();
+</script>
 </body>
 </html>
